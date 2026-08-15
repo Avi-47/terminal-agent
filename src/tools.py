@@ -96,6 +96,58 @@ def list_files(path="."):
     except OSError as e:
         return f"Error listing directory '{path}': {e}"
 
+def search_files(query, path="."):
+    """
+    Search text files inside the workspace for a given string.
+    Returns matching file paths and line numbers.
+    """
+    if not query or not query.strip():
+        return "Error: search query must not be empty."
+    try:
+        search_root = resolve_workspace_path(path)
+        if not search_root.exists():
+            return f"Error: path not found: {path}"
+        if not search_root.is_dir():
+            return f"Error: path is not a directory: {path}"
+        matches = []
+        for file_path in search_root.rglob("*"):
+            if not file_path.is_file():
+                continue
+            # Avoid searching Git internals and Python cache files.
+            if ".git" in file_path.parts:
+                continue
+            if "__pycache__" in file_path.parts:
+                continue
+            try:
+                with open(
+                    file_path,
+                    "r",
+                    encoding="utf-8",
+                ) as file:
+                    for line_number, line in enumerate(file, start=1):
+                        if query.lower() in line.lower():
+                            relative_path = file_path.relative_to(
+                                WORKSPACE_ROOT
+                            )
+                            matches.append(
+                                f"{relative_path}:{line_number}: "
+                                f"{line.rstrip()}"
+                            )
+
+                            if len(matches) >= 100:
+                                return (
+                                    "\n".join(matches)
+                                    + "\n\nSearch stopped after 100 matches."
+                                )
+            except (UnicodeDecodeError, OSError):
+                # Ignore binary/unreadable files.
+                continue
+        if not matches:
+            return f"No matches found for: {query}"
+        return "\n".join(matches)
+    except ValueError as e:
+        return f"Error: {e}"
+
 def run_command(command, timeout=10):
     """
     Execute an allowed command inside the agent workspace.
@@ -176,6 +228,7 @@ TOOL_FUNCTIONS = {
     "read_file": read_file,
     "write_file": write_file,
     "list_files": list_files,
+    "search_files": search_files,
     "run_command": run_command,
     "git_status": git_status,
 }
@@ -302,6 +355,38 @@ TOOLS = [
                 }
             },
             "required": [],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
+        "name": "search_files",
+        "description": (
+            "Search text files recursively inside the workspace for a given "
+            "text string. Returns matching file paths, line numbers, and "
+            "matching lines. Use this when you need to find where a function, "
+            "class, variable, error message, or other text appears in the "
+            "codebase."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Text to search for. The search is case-insensitive."
+                    )
+                },
+                "path": {
+                    "type": "string",
+                    "description": (
+                        "Directory relative to the workspace root to search. "
+                        "Use '.' to search the entire workspace."
+                    ),
+                    "default": "."
+                }
+            },
+            "required": ["query"],
             "additionalProperties": False
         }
     },

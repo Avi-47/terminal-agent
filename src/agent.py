@@ -27,6 +27,10 @@ class Agent:
             "the workspace unnecessarily when the requested file and operation "
             "are already clear. "
 
+            "When the user asks you to search, find, locate, or look for text "
+            "inside the project or codebase, use search_files. Do not use "
+            "run_command for codebase searching. "
+
             "When a dedicated tool exists for an operation, use that dedicated "
             "tool instead of attempting the same operation through run_command. "
             "In particular, when Git information is needed, use git_status "
