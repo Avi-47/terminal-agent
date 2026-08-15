@@ -8,7 +8,6 @@ from tools import TOOLS, execute_tool_call
 
 def main():
     load_dotenv()
-
     api_key = os.getenv("GROQ_API_KEY")
 
     if not api_key:
