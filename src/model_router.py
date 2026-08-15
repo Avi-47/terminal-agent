@@ -1,9 +1,13 @@
+# MODELS = [
+#     "qwen/qwen3.6-27b",
+#     "openai/gpt-oss-120b",
+#     "openai/gpt-oss-20b",
+#     "llama-3.3-70b-versatile",
+#     "llama-3.1-8b-instant",
+# ]
 MODELS = [
-    "qwen/qwen3.6-27b",
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
+    # "gemini-2.5-flash",
+    "gemini-3.6-flash",
 ]
 
 def create_response(client, models, instructions, conversation, tools):
@@ -13,10 +17,15 @@ def create_response(client, models, instructions, conversation, tools):
         try:
             print(f"\n[Model: {model}]")
 
-            return client.responses.create(
+            # return client.responses.create(
+            #     model=model,
+            #     instructions=instructions,
+            #     input=conversation,
+            #     tools=tools,
+            # )
+            client.chat.completions.create(
                 model=model,
-                instructions=instructions,
-                input=conversation,
+                messages=conversation,
                 tools=tools,
             )
 

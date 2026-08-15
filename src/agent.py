@@ -1,5 +1,6 @@
-from model_router import MODELS, create_response
-from tools import TOOLS, execute_tool_call
+import json
+from .model_router import MODELS, create_response
+from .tools import TOOLS, execute_tool_call
 
 
 class Agent:
@@ -7,6 +8,7 @@ class Agent:
         self.client = client
         self.conversation = []
         self.max_iterations = 10
+        self.plan = []
 
         self.instructions = (
             "You are a helpful coding assistant. "
@@ -38,6 +40,8 @@ class Agent:
 
             "After modifying code, normally run an appropriate command to "
             "verify that the change works. "
+            "When running Python tests, use 'python -m pytest' rather than "
+            "'pytest' directly. "
 
             "Treat tool errors, non-zero exit codes, stderr output, exceptions, "
             "and other execution failures as observations that can be used to "
@@ -56,7 +60,101 @@ class Agent:
             "performed appropriate verification when verification is possible."
         )
 
+    def create_plan(self, prompt):
+        planning_instructions = (
+            "You are a planning component for a coding agent. "
+            "Decide whether the user's request requires a multi-step plan. "
+
+            "Return ONLY valid JSON. Do not use Markdown. "
+            "Do not include explanations. "
+
+            "The JSON must have exactly this structure: "
+            '{"needs_plan": true, "tasks": [{"task": "..."}, {"task": "..."}]} '
+
+            "If the request is simple and does not need multiple steps, return: "
+            '{"needs_plan": false, "tasks": []} '
+
+            "If a plan is needed, create concise, concrete tasks. "
+            "Do not include status fields. "
+            "The Python agent will add and manage task status."
+        )
+
+        planning_conversation = [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ]
+
+        response = create_response(
+            self.client,
+            MODELS,
+            planning_instructions,
+            planning_conversation,
+            [],
+        )
+
+        raw = response.output_text.strip()
+
+        if raw.startswith("```"):
+            raw = raw.removeprefix("```json").removeprefix("```")
+            raw = raw.removesuffix("```").strip()
+
+        plan_data = json.loads(raw)
+
+        if not plan_data.get("needs_plan"):
+            return []
+
+        tasks = plan_data.get("tasks", [])
+
+        return [
+            {
+                "task": item["task"],
+                "status": "pending",
+            }
+            for item in tasks
+        ]
+
+    def display_plan(self):
+        if not self.plan:
+            return
+
+        print("\nPlan:")
+
+        for item in self.plan:
+            status = item["status"]
+            task = item["task"]
+
+            if status == "pending":
+                symbol = "[ ]"
+            elif status == "in_progress":
+                symbol = "[>]"
+            elif status == "done":
+                symbol = "[x]"
+            else:
+                symbol = "[?]"
+
+            print(f"{symbol} {task}")
+    
+    def update_plan_status(self, index, status):
+        if not self.plan:
+            return
+
+        if status not in ("pending", "in_progress", "done"):
+            raise ValueError(f"Invalid plan status: {status}")
+
+        if index < 0 or index >= len(self.plan):
+            raise IndexError("Plan index out of range")
+
+        self.plan[index]["status"] = status
+
     def run(self, prompt):
+        self.plan = self.create_plan(prompt)
+        self.display_plan()
+        if self.plan:
+            self.update_plan_status(0, "in_progress")
+            self.display_plan()
+
         self.conversation.append({
             "role": "user",
             "content": prompt,
@@ -81,9 +179,7 @@ class Agent:
                 return response.output_text
 
             iteration += 1
-
             tool_outputs = []
-
             # Save the model's response into the conversation.
             self.conversation.extend(response.output)
 
@@ -104,15 +200,15 @@ class Agent:
 
                 print(f"\nTool requested: {item.name}")
                 print(f"Arguments: {item.arguments}")
-                print(f"Call ID: {item.call_id}")
+                # print(f"Call ID: {item.call_id}")
 
                 tool_result = execute_tool_call(
                     item.name,
                     item.arguments,
                 )
 
-                print("\nTool result:")
-                print(tool_result)
+                print("\nTool completed successfully.")
+                # print(tool_result)
 
                 tool_outputs.append({
                     "type": "function_call_output",
