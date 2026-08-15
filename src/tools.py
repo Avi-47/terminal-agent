@@ -71,6 +71,31 @@ def write_file(path, content):
     except OSError as e:
         return f"Error writing file '{path}': {e}"
 
+def list_files(path="."):
+    """
+    List the immediate contents of a directory inside the workspace.
+    """
+    try:
+        directory = resolve_workspace_path(path)
+        if not directory.exists():
+            return f"Error: directory not found: {path}"
+        if not directory.is_dir():
+            return f"Error: path is not a directory: {path}"
+        entries = sorted(directory.iterdir(), key=lambda item: item.name.lower())
+        if not entries:
+            return f"Directory is empty: {path}"
+        results = []
+        for entry in entries:
+            if entry.is_dir():
+                results.append(f"{entry.name}/")
+            else:
+                results.append(entry.name)
+        return "\n".join(results)
+    except ValueError as e:
+        return f"Error: {e}"
+    except OSError as e:
+        return f"Error listing directory '{path}': {e}"
+
 def run_command(command, timeout=10):
     """
     Execute an allowed command inside the agent workspace.
@@ -114,6 +139,46 @@ def run_command(command, timeout=10):
         return f"Error: command not found: {command}"
     except OSError as e:
         return f"Error running command: {e}"
+
+def git_status():
+    """
+    Return the current Git working-tree status for the workspace.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=WORKSPACE_ROOT,
+            capture_output=True,
+            text=True,
+            shell=False,
+            timeout=10,
+        )
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        if result.returncode != 0:
+            if stderr:
+                return f"Error: git status failed:\n{stderr}"
+            return (
+                f"Error: git status failed with exit code "
+                f"{result.returncode}."
+            )
+        if not stdout:
+            return "Git working tree is clean."
+        return stdout
+    except subprocess.TimeoutExpired:
+        return "Error: git status timed out."
+    except FileNotFoundError:
+        return "Error: git is not installed or not available on PATH."
+    except OSError as e:
+        return f"Error running git status: {e}"
+
+TOOL_FUNCTIONS = {
+    "read_file": read_file,
+    "write_file": write_file,
+    "list_files": list_files,
+    "run_command": run_command,
+    "git_status": git_status,
+}
 
 TOOLS = [
     {
@@ -197,35 +262,65 @@ TOOLS = [
             "required": ["command"],
             "additionalProperties": False
         }
-    }
+    },
+    {
+        "type": "function",
+        "name": "git_status",
+        "description": (
+            "Show the current Git working-tree status of the workspace. "
+            "Use this when you need to understand which files are modified, "
+            "staged, or untracked. This tool takes no arguments."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
+        "name": "list_files",
+        "description": (
+            "List the immediate files and directories inside a workspace directory. "
+            "Use this when you need to discover the workspace contents before "
+            "reading or modifying files. Paths are relative to the workspace root. "
+            "The default path is the workspace root. This tool does not recursively "
+            "list files."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": (
+                        "Directory path relative to the workspace root. "
+                        "Use '.' or omit the argument to list the workspace root. "
+                        "For example, 'src'."
+                    ),
+                    "default": "."
+                }
+            },
+            "required": [],
+            "additionalProperties": False
+        }
+    },
 ]
 
 def execute_tool(name, arguments):
     """
-    Execute a tool requested by the LLM.
+    Execute a tool requested by the LLM using the tool registry.
     """
-    if name == "read_file":
-        path = arguments.get("path")
-        if not path:
-            return "Error: path is required."
-        return read_file(path)
 
-    if name == "write_file":
-        path = arguments.get("path")
-        content = arguments.get("content")
-        if not path:
-            return "Error: path is required."
-        if content is None:
-            return "Error: content is required."
-        return write_file(path, content)
+    tool_function = TOOL_FUNCTIONS.get(name)
 
-    if name == "run_command":
-        command = arguments.get("command")
-        timeout = arguments.get("timeout", 10)
-        if not command:
-            return "Error: command is required."
-        return run_command(command, timeout)
-    return f"Unknown tool: {name}"
+    if tool_function is None:
+        return f"Unknown tool: {name}"
+
+    try:
+        return tool_function(**arguments)
+    except TypeError as e:
+        return f"Error executing tool '{name}': {e}"
 
 def execute_tool_call(name, arguments_json):
     """
