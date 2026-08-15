@@ -3,10 +3,32 @@ import shlex
 import subprocess
 from pathlib import Path
 
+ALLOWED_COMMANDS = {
+    "python",
+    "python.exe",
+}
+
+def validate_command(args):
+    """
+    Validate the parsed command before execution.
+
+    Returns:
+        None if allowed.
+        Error message string if rejected.
+    """
+
+    if not args:
+        return "Error: command must not be empty."
+
+    program = Path(args[0]).name.lower()
+
+    if program not in ALLOWED_COMMANDS:
+        return f"Error: command is not allowed: {program}"
+
+    return None
 
 # terminal-agent/
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
-
 
 def resolve_workspace_path(path):
     """
@@ -79,23 +101,28 @@ def write_file(path, content):
 
 def run_command(command, timeout=10):
     """
-    Execute a command inside the agent workspace.
-
-    The first version intentionally:
-    - does not use shell=True
-    - captures stdout and stderr
-    - returns the exit code
-    - enforces a timeout
+    Execute an allowed command inside the agent workspace.
     """
 
     if not command or not command.strip():
         return "Error: command must not be empty."
 
+    if not isinstance(timeout, int):
+        return "Error: timeout must be an integer."
+
+    if timeout < 1 or timeout > 30:
+        return "Error: timeout must be between 1 and 30 seconds."
+
     try:
-        args = shlex.split(command, posix=False)
+        args = shlex.split(command, posix=True)
 
         if not args:
             return "Error: command must not be empty."
+
+        validation_error = validate_command(args)
+
+        if validation_error:
+            return validation_error
 
         result = subprocess.run(
             args,
@@ -127,13 +154,10 @@ def run_command(command, timeout=10):
         )
 
     except FileNotFoundError:
-        return (
-            f"Error: command not found: {command}"
-        )
+        return f"Error: command not found: {command}"
 
     except OSError as e:
         return f"Error running command: {e}"
-
 
 TOOLS = [
     {
