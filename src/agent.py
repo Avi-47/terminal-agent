@@ -36,9 +36,16 @@ class Agent:
 
             "When a dedicated tool exists for an operation, use that dedicated "
             "tool instead of attempting the same operation through run_command. "
-            "In particular, when Git information is needed, use git_status "
-            "instead of running Git commands through run_command. "
+            "For Git operations, use the dedicated Git tools instead of "
+            "run_command. Use git_status to inspect which files are modified, "
+            "staged, or untracked. Use git_diff to inspect the actual content "
+            "of unstaged changes. Use git_add only when the user explicitly "
+            "asks to stage changes. Do not request Git commands that are not "
+            "provided as dedicated tools. "
 
+            "Do not use git_status alone when the user asks what the actual "
+            "content of a change is. In that situation, use git_diff. "
+            
             "After modifying code, normally run an appropriate command to "
             "verify that the change works. "
             "When running Python tests, use 'python -m pytest' rather than "
