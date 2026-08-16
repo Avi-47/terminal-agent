@@ -224,6 +224,135 @@ def git_status():
     except OSError as e:
         return f"Error running git status: {e}"
 
+def git_diff():
+    """
+    Return the current unstaged Git diff for the workspace.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "diff"],
+            cwd=WORKSPACE_ROOT,
+            capture_output=True,
+            text=True,
+            shell=False,
+            timeout=10,
+        )
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+
+        if result.returncode != 0:
+            if stderr:
+                return f"Error: git diff failed:\n{stderr}"
+            return (
+                f"Error: git diff failed with exit code "
+                f"{result.returncode}."
+            )
+
+        if not stdout:
+            return "Git working tree has no unstaged changes."
+        return stdout
+
+    except subprocess.TimeoutExpired:
+        return "Error: git diff timed out."
+    except FileNotFoundError:
+        return "Error: git is not installed or not available on PATH."
+    except OSError as e:
+        return f"Error running git diff: {e}"
+
+def git_add(paths):
+    """
+    Stage one or more files in the workspace using Git.
+    """
+    if not paths:
+        return "Error: paths must not be empty."
+
+    if not isinstance(paths, list):
+        return "Error: paths must be a list."
+
+    if not paths:
+        return "Error: paths must not be empty."
+
+    for path in paths:
+        if not isinstance(path, str) or not path.strip():
+            return "Error: each path must be a non-empty string."
+
+        try:
+            resolve_workspace_path(path)
+        except ValueError as e:
+            return f"Error: {e}"
+
+    try:
+        result = subprocess.run(
+            ["git", "add", "--", *paths],
+            cwd=WORKSPACE_ROOT,
+            capture_output=True,
+            text=True,
+            shell=False,
+            timeout=10,
+        )
+
+        stderr = result.stderr.strip()
+
+        if result.returncode != 0:
+            if stderr:
+                return f"Error: git add failed:\n{stderr}"
+            return (
+                f"Error: git add failed with exit code "
+                f"{result.returncode}."
+            )
+
+        return f"Successfully staged {len(paths)} path(s)."
+
+    except subprocess.TimeoutExpired:
+        return "Error: git add timed out."
+    except FileNotFoundError:
+        return "Error: git is not installed or not available on PATH."
+    except OSError as e:
+        return f"Error running git add: {e}"
+
+def git_commit(message):
+    """
+    Commit staged changes using the supplied commit message.
+    """
+    if not message or not message.strip():
+        return "Error: commit message must not be empty."
+
+    if "\n" in message or "\r" in message:
+        return "Error: commit message must be a single line."
+
+    try:
+        result = subprocess.run(
+            ["git", "commit", "-m", message],
+            cwd=WORKSPACE_ROOT,
+            capture_output=True,
+            text=True,
+            shell=False,
+            timeout=10,
+        )
+
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+
+        if result.returncode != 0:
+            if stderr:
+                return f"Error: git commit failed:\n{stderr}"
+            return (
+                f"Error: git commit failed with exit code "
+                f"{result.returncode}."
+            )
+
+        if stdout:
+            return stdout
+
+        return "Git commit completed successfully."
+
+    except subprocess.TimeoutExpired:
+        return "Error: git commit timed out."
+    except FileNotFoundError:
+        return "Error: git is not installed or not available on PATH."
+    except OSError as e:
+        return f"Error running git commit: {e}"
+    
 TOOL_FUNCTIONS = {
     "read_file": read_file,
     "write_file": write_file,
@@ -231,6 +360,9 @@ TOOL_FUNCTIONS = {
     "search_files": search_files,
     "run_command": run_command,
     "git_status": git_status,
+    "git_diff": git_diff,
+    "git_add": git_add,
+    "git_commit": git_commit,
 }
 
 TOOLS = [
@@ -326,6 +458,72 @@ TOOLS = [
     },
     {
         "type": "function",
+        "name": "git_diff",
+        "description": (
+            "Show the actual content of current unstaged changes in the "
+            "workspace using Git diff. Use this when you need to inspect "
+            "what was changed inside modified files. This shows unstaged "
+            "changes only and takes no arguments."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
+        "name": "git_add",
+        "description": (
+            "Stage one or more files or paths in the workspace using Git. "
+            "Use this when the user explicitly asks to stage changes. "
+            "Do not use this merely to inspect changes."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": (
+                        "One or more paths relative to the workspace root "
+                        "to stage."
+                    )
+                }
+            },
+            "required": ["paths"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
+        "name": "git_commit",
+        "description": (
+            "Create a Git commit from the currently staged changes using "
+            "the supplied commit message. Use this only when the user "
+            "explicitly asks to commit changes. Do not automatically "
+            "commit changes after editing files."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": (
+                        "The commit message. It must be non-empty and "
+                        "contain no newline characters."
+                    )
+                }
+            },
+            "required": ["message"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
         "name": "list_files",
         "description": (
             "List the immediate files and directories inside a workspace directory. "
@@ -384,172 +582,6 @@ TOOLS = [
         }
     },
 ]
-
-
-# TOOLS = [
-#     {
-#         "type": "function",
-#         "function": {
-#             "name": "read_file",
-#             "description": (
-#                 "Read the contents of exactly one existing file from the workspace. "
-#                 "Paths are relative to the workspace root. "
-#                 "You must provide a non-empty file path."
-#             ),
-#             "parameters": {
-#                 "type": "object",
-#                 "properties": {
-#                     "path": {
-#                         "type": "string",
-#                         "description": (
-#                             "Path relative to the workspace root, "
-#                             "for example 'src/main.py'."
-#                         )
-#                     }
-#                 },
-#                 "required": ["path"],
-#                 "additionalProperties": False
-#             }
-#         }
-#     },
-
-#     {
-#         "type": "function",
-#         "function": {
-#             "name": "write_file",
-#             "description": (
-#                 "Write complete content to exactly one file in the workspace. "
-#                 "Paths are relative to the workspace root. "
-#                 "This overwrites the existing file."
-#             ),
-#             "parameters": {
-#                 "type": "object",
-#                 "properties": {
-#                     "path": {
-#                         "type": "string",
-#                         "description": (
-#                             "Path relative to the workspace root, "
-#                             "for example 'hello.py'."
-#                         )
-#                     },
-#                     "content": {
-#                         "type": "string",
-#                         "description": "The complete content to write."
-#                     }
-#                 },
-#                 "required": ["path", "content"],
-#                 "additionalProperties": False
-#             }
-#         }
-#     },
-
-#     {
-#         "type": "function",
-#         "function": {
-#             "name": "run_command",
-#             "description": (
-#                 "Run one allowed command in the workspace and return its "
-#                 "exit code, stdout, and stderr. "
-#                 "Use Python commands for executing programs and tests. "
-#                 "For example: 'python -m pytest'."
-#             ),
-#             "parameters": {
-#                 "type": "object",
-#                 "properties": {
-#                     "command": {
-#                         "type": "string",
-#                         "description": (
-#                             "The command to execute. "
-#                             "Use Python commands, for example "
-#                             "'python -m pytest'."
-#                         )
-#                     }
-#                 },
-#                 "required": ["command"],
-#                 "additionalProperties": False
-#             }
-#         }
-#     },
-
-#     {
-#         "type": "function",
-#         "function": {
-#             "name": "git_status",
-#             "description": (
-#                 "Show the current Git working-tree status of the workspace. "
-#                 "Use this when you need to understand which files are modified, "
-#                 "staged, or untracked. This tool takes no arguments."
-#             ),
-#             "parameters": {
-#                 "type": "object",
-#                 "properties": {},
-#                 "required": [],
-#                 "additionalProperties": False
-#             }
-#         }
-#     },
-
-#     {
-#         "type": "function",
-#         "function": {
-#             "name": "list_files",
-#             "description": (
-#                 "List the immediate files and directories inside a workspace "
-#                 "directory. Use this when you need to discover the workspace "
-#                 "contents before reading or modifying files."
-#             ),
-#             "parameters": {
-#                 "type": "object",
-#                 "properties": {
-#                     "path": {
-#                         "type": "string",
-#                         "description": (
-#                             "Directory path relative to the workspace root. "
-#                             "Use '.' for the workspace root."
-#                         ),
-#                         "default": "."
-#                     }
-#                 },
-#                 "required": [],
-#                 "additionalProperties": False
-#             }
-#         }
-#     },
-
-#     {
-#         "type": "function",
-#         "function": {
-#             "name": "search_files",
-#             "description": (
-#                 "Search text files recursively inside the workspace for a "
-#                 "given text string. Returns matching file paths, line numbers, "
-#                 "and matching lines."
-#             ),
-#             "parameters": {
-#                 "type": "object",
-#                 "properties": {
-#                     "query": {
-#                         "type": "string",
-#                         "description": (
-#                             "Text to search for. The search is case-insensitive."
-#                         )
-#                     },
-#                     "path": {
-#                         "type": "string",
-#                         "description": (
-#                             "Directory relative to the workspace root to search. "
-#                             "Use '.' to search the entire workspace."
-#                         ),
-#                         "default": "."
-#                     }
-#                 },
-#                 "required": ["query"],
-#                 "additionalProperties": False
-#             }
-#         }
-#     },
-# ]
-
 
 def execute_tool(name, arguments):
     """
