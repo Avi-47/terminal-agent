@@ -233,322 +233,322 @@ TOOL_FUNCTIONS = {
     "git_status": git_status,
 }
 
-# TOOLS = [
-#     {
-#         "type": "function",
-#         "name": "read_file",
-#         "description": (
-#             "Read the contents of exactly one existing file from the workspace. "
-#             "Paths are relative to the workspace root. "
-#             "You must provide a non-empty file path."
-#         ),
-#         "parameters": {
-#             "type": "object",
-#             "properties": {
-#                 "path": {
-#                     "type": "string",
-#                     "description": (
-#                         "Path relative to the workspace root, "
-#                         "for example 'src/main.py'."
-#                     )
-#                 }
-#             },
-#             "required": ["path"],
-#             "additionalProperties": False
-#         }
-#     },
-#     {
-#         "type": "function",
-#         "name": "write_file",
-#         "description": (
-#             "Write complete content to exactly one file in the workspace. "
-#             "Paths are relative to the workspace root. "
-#             "This overwrites the existing file."
-#         ),
-#         "parameters": {
-#             "type": "object",
-#             "properties": {
-#                 "path": {
-#                     "type": "string",
-#                     "description": (
-#                         "Path relative to the workspace root, "
-#                         "for example 'hello.py'."
-#                     )
-#                 },
-#                 "content": {
-#                     "type": "string",
-#                     "description": "The complete content to write."
-#                 }
-#             },
-#             "required": ["path", "content"],
-#             "additionalProperties": False
-#         }
-#     },
-#     {
-#         "type": "function",
-#         "name": "run_command",
-#         "description": (
-#             "Run one allowed command in the workspace and return its exit code, "
-#             "stdout, and stderr. "
-#             "Use Python commands for executing programs and tests. "
-#             "For example: 'python -m pytest'."
-#         ),
-#         "parameters": {
-#             "type": "object",
-#             "properties": {
-#                 "command": {
-#                     "type": "string",
-#                     "description": (
-#                         "The command to execute. "
-#                         "Use Python commands, for example "
-#                         "'python -m pytest'."
-#                     )
-#                 }
-#             },
-#             "required": ["command"],
-#             "additionalProperties": False
-#         }
-#     },
-#     {
-#         "type": "function",
-#         "name": "git_status",
-#         "description": (
-#             "Show the current Git working-tree status of the workspace. "
-#             "Use this when you need to understand which files are modified, "
-#             "staged, or untracked. This tool takes no arguments."
-#         ),
-#         "parameters": {
-#             "type": "object",
-#             "properties": {},
-#             "required": [],
-#             "additionalProperties": False
-#         }
-#     },
-#     {
-#         "type": "function",
-#         "name": "list_files",
-#         "description": (
-#             "List the immediate files and directories inside a workspace directory. "
-#             "Use this when you need to discover the workspace contents before "
-#             "reading or modifying files. Paths are relative to the workspace root. "
-#             "The default path is the workspace root. This tool does not recursively "
-#             "list files."
-#         ),
-#         "parameters": {
-#             "type": "object",
-#             "properties": {
-#                 "path": {
-#                     "type": "string",
-#                     "description": (
-#                         "Directory path relative to the workspace root. "
-#                         "Use '.' or omit the argument to list the workspace root. "
-#                         "For example, 'src'."
-#                     ),
-#                     "default": "."
-#                 }
-#             },
-#             "required": [],
-#             "additionalProperties": False
-#         }
-#     },
-#     {
-#         "type": "function",
-#         "name": "search_files",
-#         "description": (
-#             "Search text files recursively inside the workspace for a given "
-#             "text string. Returns matching file paths, line numbers, and "
-#             "matching lines. Use this when you need to find where a function, "
-#             "class, variable, error message, or other text appears in the "
-#             "codebase."
-#         ),
-#         "parameters": {
-#             "type": "object",
-#             "properties": {
-#                 "query": {
-#                     "type": "string",
-#                     "description": (
-#                         "Text to search for. The search is case-insensitive."
-#                     )
-#                 },
-#                 "path": {
-#                     "type": "string",
-#                     "description": (
-#                         "Directory relative to the workspace root to search. "
-#                         "Use '.' to search the entire workspace."
-#                     ),
-#                     "default": "."
-#                 }
-#             },
-#             "required": ["query"],
-#             "additionalProperties": False
-#         }
-#     },
-# ]
-
-
 TOOLS = [
     {
         "type": "function",
-        "function": {
-            "name": "read_file",
-            "description": (
-                "Read the contents of exactly one existing file from the workspace. "
-                "Paths are relative to the workspace root. "
-                "You must provide a non-empty file path."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": (
-                            "Path relative to the workspace root, "
-                            "for example 'src/main.py'."
-                        )
-                    }
-                },
-                "required": ["path"],
-                "additionalProperties": False
-            }
+        "name": "read_file",
+        "description": (
+            "Read the contents of exactly one existing file from the workspace. "
+            "Paths are relative to the workspace root. "
+            "You must provide a non-empty file path."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": (
+                        "Path relative to the workspace root, "
+                        "for example 'src/main.py'."
+                    )
+                }
+            },
+            "required": ["path"],
+            "additionalProperties": False
         }
     },
-
     {
         "type": "function",
-        "function": {
-            "name": "write_file",
-            "description": (
-                "Write complete content to exactly one file in the workspace. "
-                "Paths are relative to the workspace root. "
-                "This overwrites the existing file."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": (
-                            "Path relative to the workspace root, "
-                            "for example 'hello.py'."
-                        )
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "The complete content to write."
-                    }
+        "name": "write_file",
+        "description": (
+            "Write complete content to exactly one file in the workspace. "
+            "Paths are relative to the workspace root. "
+            "This overwrites the existing file."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": (
+                        "Path relative to the workspace root, "
+                        "for example 'hello.py'."
+                    )
                 },
-                "required": ["path", "content"],
-                "additionalProperties": False
-            }
+                "content": {
+                    "type": "string",
+                    "description": "The complete content to write."
+                }
+            },
+            "required": ["path", "content"],
+            "additionalProperties": False
         }
     },
-
     {
         "type": "function",
-        "function": {
-            "name": "run_command",
-            "description": (
-                "Run one allowed command in the workspace and return its "
-                "exit code, stdout, and stderr. "
-                "Use Python commands for executing programs and tests. "
-                "For example: 'python -m pytest'."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": (
-                            "The command to execute. "
-                            "Use Python commands, for example "
-                            "'python -m pytest'."
-                        )
-                    }
-                },
-                "required": ["command"],
-                "additionalProperties": False
-            }
+        "name": "run_command",
+        "description": (
+            "Run one allowed command in the workspace and return its exit code, "
+            "stdout, and stderr. "
+            "Use Python commands for executing programs and tests. "
+            "For example: 'python -m pytest'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": (
+                        "The command to execute. "
+                        "Use Python commands, for example "
+                        "'python -m pytest'."
+                    )
+                }
+            },
+            "required": ["command"],
+            "additionalProperties": False
         }
     },
-
     {
         "type": "function",
-        "function": {
-            "name": "git_status",
-            "description": (
-                "Show the current Git working-tree status of the workspace. "
-                "Use this when you need to understand which files are modified, "
-                "staged, or untracked. This tool takes no arguments."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-                "additionalProperties": False
-            }
+        "name": "git_status",
+        "description": (
+            "Show the current Git working-tree status of the workspace. "
+            "Use this when you need to understand which files are modified, "
+            "staged, or untracked. This tool takes no arguments."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False
         }
     },
-
     {
         "type": "function",
-        "function": {
-            "name": "list_files",
-            "description": (
-                "List the immediate files and directories inside a workspace "
-                "directory. Use this when you need to discover the workspace "
-                "contents before reading or modifying files."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": (
-                            "Directory path relative to the workspace root. "
-                            "Use '.' for the workspace root."
-                        ),
-                        "default": "."
-                    }
-                },
-                "required": [],
-                "additionalProperties": False
-            }
+        "name": "list_files",
+        "description": (
+            "List the immediate files and directories inside a workspace directory. "
+            "Use this when you need to discover the workspace contents before "
+            "reading or modifying files. Paths are relative to the workspace root. "
+            "The default path is the workspace root. This tool does not recursively "
+            "list files."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": (
+                        "Directory path relative to the workspace root. "
+                        "Use '.' or omit the argument to list the workspace root. "
+                        "For example, 'src'."
+                    ),
+                    "default": "."
+                }
+            },
+            "required": [],
+            "additionalProperties": False
         }
     },
-
     {
         "type": "function",
-        "function": {
-            "name": "search_files",
-            "description": (
-                "Search text files recursively inside the workspace for a "
-                "given text string. Returns matching file paths, line numbers, "
-                "and matching lines."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": (
-                            "Text to search for. The search is case-insensitive."
-                        )
-                    },
-                    "path": {
-                        "type": "string",
-                        "description": (
-                            "Directory relative to the workspace root to search. "
-                            "Use '.' to search the entire workspace."
-                        ),
-                        "default": "."
-                    }
+        "name": "search_files",
+        "description": (
+            "Search text files recursively inside the workspace for a given "
+            "text string. Returns matching file paths, line numbers, and "
+            "matching lines. Use this when you need to find where a function, "
+            "class, variable, error message, or other text appears in the "
+            "codebase."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Text to search for. The search is case-insensitive."
+                    )
                 },
-                "required": ["query"],
-                "additionalProperties": False
-            }
+                "path": {
+                    "type": "string",
+                    "description": (
+                        "Directory relative to the workspace root to search. "
+                        "Use '.' to search the entire workspace."
+                    ),
+                    "default": "."
+                }
+            },
+            "required": ["query"],
+            "additionalProperties": False
         }
     },
 ]
+
+
+# TOOLS = [
+#     {
+#         "type": "function",
+#         "function": {
+#             "name": "read_file",
+#             "description": (
+#                 "Read the contents of exactly one existing file from the workspace. "
+#                 "Paths are relative to the workspace root. "
+#                 "You must provide a non-empty file path."
+#             ),
+#             "parameters": {
+#                 "type": "object",
+#                 "properties": {
+#                     "path": {
+#                         "type": "string",
+#                         "description": (
+#                             "Path relative to the workspace root, "
+#                             "for example 'src/main.py'."
+#                         )
+#                     }
+#                 },
+#                 "required": ["path"],
+#                 "additionalProperties": False
+#             }
+#         }
+#     },
+
+#     {
+#         "type": "function",
+#         "function": {
+#             "name": "write_file",
+#             "description": (
+#                 "Write complete content to exactly one file in the workspace. "
+#                 "Paths are relative to the workspace root. "
+#                 "This overwrites the existing file."
+#             ),
+#             "parameters": {
+#                 "type": "object",
+#                 "properties": {
+#                     "path": {
+#                         "type": "string",
+#                         "description": (
+#                             "Path relative to the workspace root, "
+#                             "for example 'hello.py'."
+#                         )
+#                     },
+#                     "content": {
+#                         "type": "string",
+#                         "description": "The complete content to write."
+#                     }
+#                 },
+#                 "required": ["path", "content"],
+#                 "additionalProperties": False
+#             }
+#         }
+#     },
+
+#     {
+#         "type": "function",
+#         "function": {
+#             "name": "run_command",
+#             "description": (
+#                 "Run one allowed command in the workspace and return its "
+#                 "exit code, stdout, and stderr. "
+#                 "Use Python commands for executing programs and tests. "
+#                 "For example: 'python -m pytest'."
+#             ),
+#             "parameters": {
+#                 "type": "object",
+#                 "properties": {
+#                     "command": {
+#                         "type": "string",
+#                         "description": (
+#                             "The command to execute. "
+#                             "Use Python commands, for example "
+#                             "'python -m pytest'."
+#                         )
+#                     }
+#                 },
+#                 "required": ["command"],
+#                 "additionalProperties": False
+#             }
+#         }
+#     },
+
+#     {
+#         "type": "function",
+#         "function": {
+#             "name": "git_status",
+#             "description": (
+#                 "Show the current Git working-tree status of the workspace. "
+#                 "Use this when you need to understand which files are modified, "
+#                 "staged, or untracked. This tool takes no arguments."
+#             ),
+#             "parameters": {
+#                 "type": "object",
+#                 "properties": {},
+#                 "required": [],
+#                 "additionalProperties": False
+#             }
+#         }
+#     },
+
+#     {
+#         "type": "function",
+#         "function": {
+#             "name": "list_files",
+#             "description": (
+#                 "List the immediate files and directories inside a workspace "
+#                 "directory. Use this when you need to discover the workspace "
+#                 "contents before reading or modifying files."
+#             ),
+#             "parameters": {
+#                 "type": "object",
+#                 "properties": {
+#                     "path": {
+#                         "type": "string",
+#                         "description": (
+#                             "Directory path relative to the workspace root. "
+#                             "Use '.' for the workspace root."
+#                         ),
+#                         "default": "."
+#                     }
+#                 },
+#                 "required": [],
+#                 "additionalProperties": False
+#             }
+#         }
+#     },
+
+#     {
+#         "type": "function",
+#         "function": {
+#             "name": "search_files",
+#             "description": (
+#                 "Search text files recursively inside the workspace for a "
+#                 "given text string. Returns matching file paths, line numbers, "
+#                 "and matching lines."
+#             ),
+#             "parameters": {
+#                 "type": "object",
+#                 "properties": {
+#                     "query": {
+#                         "type": "string",
+#                         "description": (
+#                             "Text to search for. The search is case-insensitive."
+#                         )
+#                     },
+#                     "path": {
+#                         "type": "string",
+#                         "description": (
+#                             "Directory relative to the workspace root to search. "
+#                             "Use '.' to search the entire workspace."
+#                         ),
+#                         "default": "."
+#                     }
+#                 },
+#                 "required": ["query"],
+#                 "additionalProperties": False
+#             }
+#         }
+#     },
+# ]
 
 
 def execute_tool(name, arguments):

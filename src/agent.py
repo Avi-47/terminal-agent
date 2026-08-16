@@ -9,6 +9,7 @@ class Agent:
         self.conversation = []
         self.max_iterations = 10
         self.plan = []
+        self.current_plan_index = 0
 
         self.instructions = (
             "You are a helpful coding assistant. "
@@ -75,17 +76,16 @@ class Agent:
             '{"needs_plan": false, "tasks": []} '
 
             "If a plan is needed, create concise, concrete tasks. "
+            "Each task should represent one meaningful step of the user's request. "
             "Do not include status fields. "
             "The Python agent will add and manage task status."
         )
-
         planning_conversation = [
             {
                 "role": "user",
                 "content": prompt,
             }
         ]
-
         response = create_response(
             self.client,
             MODELS,
@@ -93,20 +93,14 @@ class Agent:
             planning_conversation,
             [],
         )
-
         raw = response.output_text.strip()
-
         if raw.startswith("```"):
             raw = raw.removeprefix("```json").removeprefix("```")
             raw = raw.removesuffix("```").strip()
-
         plan_data = json.loads(raw)
-
         if not plan_data.get("needs_plan"):
             return []
-
         tasks = plan_data.get("tasks", [])
-
         return [
             {
                 "task": item["task"],
@@ -135,6 +129,25 @@ class Agent:
                 symbol = "[?]"
 
             print(f"{symbol} {task}")
+
+    def display_plan_item(self, index):
+        if not self.plan:
+            return
+
+        if index < 0 or index >= len(self.plan):
+            return
+        item = self.plan[index]
+        status = item["status"]
+        task = item["task"]
+        if status == "pending":
+            symbol = "[ ]"
+        elif status == "in_progress":
+            symbol = "[>]"
+        elif status == "done":
+            symbol = "[x]"
+        else:
+            symbol = "[?]"
+        print(f"{symbol} {task}")
     
     def update_plan_status(self, index, status):
         if not self.plan:
@@ -148,12 +161,24 @@ class Agent:
 
         self.plan[index]["status"] = status
 
+    def start_plan_task(self, index):
+        if not self.plan:
+            return
+        self.update_plan_status(index, "in_progress")
+        self.display_plan_item(index)
+
+    def finish_plan_task(self, index):
+        if not self.plan:
+            return
+        self.update_plan_status(index, "done")
+        self.display_plan_item(index)
+
     def run(self, prompt):
         self.plan = self.create_plan(prompt)
+        self.current_plan_index = 0
+
+        # Show the complete plan once.
         self.display_plan()
-        if self.plan:
-            self.update_plan_status(0, "in_progress")
-            self.display_plan()
 
         self.conversation.append({
             "role": "user",
@@ -180,10 +205,11 @@ class Agent:
 
             iteration += 1
             tool_outputs = []
-            # Save the model's response into the conversation.
+
+            # Save model response.
             self.conversation.extend(response.output)
 
-            # Show any model text that accompanies tool calls.
+            # Show model text accompanying tool calls.
             has_tool_calls = any(
                 item.type == "function_call"
                 for item in response.output
@@ -193,14 +219,19 @@ class Agent:
                 print("\nAgent >")
                 print(response.output_text)
 
+            # Start the current plan task.
+            if (
+                self.plan
+                and self.current_plan_index < len(self.plan)
+            ):
+                self.start_plan_task(self.current_plan_index)
+
             for item in response.output:
 
                 if item.type != "function_call":
                     continue
 
                 print(f"\nTool requested: {item.name}")
-                print(f"Arguments: {item.arguments}")
-                # print(f"Call ID: {item.call_id}")
 
                 tool_result = execute_tool_call(
                     item.name,
@@ -208,7 +239,6 @@ class Agent:
                 )
 
                 print("\nTool completed successfully.")
-                # print(tool_result)
 
                 tool_outputs.append({
                     "type": "function_call_output",
@@ -216,11 +246,30 @@ class Agent:
                     "output": tool_result,
                 })
 
-            # No tool calls means the model has finished.
+            # If there were no tool calls, the model has finished.
             if not tool_outputs:
+
+                # Finish only the task that was actually started.
+                if (
+                    self.plan
+                    and self.current_plan_index < len(self.plan)
+                    and self.plan[self.current_plan_index]["status"]
+                    == "in_progress"
+                ):
+                    self.finish_plan_task(self.current_plan_index)
+                    self.current_plan_index += 1
+
                 return response.output_text
 
-            # Save tool results into conversation.
+            # The current task's tool work is complete.
+            if (
+                self.plan
+                and self.current_plan_index < len(self.plan)
+            ):
+                self.finish_plan_task(self.current_plan_index)
+                self.current_plan_index += 1
+
+            # Save tool results.
             self.conversation.extend(tool_outputs)
 
             # Ask the model what to do next.
