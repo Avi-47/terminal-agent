@@ -40,8 +40,10 @@ class Agent:
             "run_command. Use git_status to inspect which files are modified, "
             "staged, or untracked. Use git_diff to inspect the actual content "
             "of unstaged changes. Use git_add only when the user explicitly "
-            "asks to stage changes. Do not request Git commands that are not "
-            "provided as dedicated tools. "
+            "asks to stage changes. Use git_commit only when the user explicitly "
+            "asks to create a commit. Never automatically stage or commit changes "
+            "just because a coding task has been completed. Do not request Git "
+            "commands that are not provided as dedicated tools. "
 
             "Do not use git_status alone when the user asks what the actual "
             "content of a change is. In that situation, use git_diff. "
