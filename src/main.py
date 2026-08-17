@@ -23,7 +23,10 @@ def main():
     )
     # client = genai.Client(api_key=api_key)
 
-    agent = Agent(client)
+    agent = Agent(
+        client,
+        confirm_callback=confirm_commit,
+    )
 
     print("Terminal Agent")
     print("Type 'exit' or 'quit' to leave.\n")
@@ -55,6 +58,12 @@ def main():
         except Exception as e:
             print(f"\nError: {e}\n")
 
+def confirm_commit():
+    answer = input(
+        '\nProceed with commit? [y/N]: '
+    ).strip().lower()
+
+    return answer in ("y", "yes")
 
 if __name__ == "__main__":
     main()

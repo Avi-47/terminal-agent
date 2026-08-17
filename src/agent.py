@@ -4,12 +4,14 @@ from .tools import TOOLS, execute_tool_call
 
 
 class Agent:
-    def __init__(self, client):
+    def __init__(self, client, confirm_callback=None):
         self.client = client
         self.conversation = []
         self.max_iterations = 10
         self.plan = []
         self.current_plan_index = 0
+        self.confirm_callback = confirm_callback
+        self.commit_confirmed = False
 
         self.instructions = (
             "You are a helpful coding assistant. "
@@ -69,6 +71,20 @@ class Agent:
             "Do not claim that a coding task is complete until you have "
             "performed appropriate verification when verification is possible."
         )
+
+    def request_commit_confirmation(self):
+        if self.confirm_callback is None:
+            return False
+
+        confirmed = self.confirm_callback()
+        self.commit_confirmed = bool(confirmed)
+        return self.commit_confirmed
+
+    def confirm_commit(self):
+        self.commit_confirmed = True
+
+    def revoke_commit_confirmation(self):
+        self.commit_confirmed = False
 
     def create_plan(self, prompt):
         planning_instructions = (
@@ -250,10 +266,17 @@ class Agent:
 
                 print(f"\nTool requested: {item.name}")
 
-                tool_result = execute_tool_call(
-                    item.name,
-                    item.arguments,
-                )
+                if item.name == "git_commit" and not self.commit_confirmed:
+                    tool_result = (
+                        "Error: git commit requires explicit confirmation "
+                        "after the agent asks for confirmation."
+                    )
+                else:
+                    tool_result = execute_tool_call(
+                        item.name,
+                        item.arguments,
+                    )
+
                 if tool_result.startswith("Error:") or tool_result.startswith("Unknown tool:"):
                     print("\nTool rejected or failed.")
                 else:
