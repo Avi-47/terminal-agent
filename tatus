@@ -1,0 +1,305 @@
+[1mdiff --git a/src/agent.py b/src/agent.py[m
+[1mindex c998a98..51d323d 100644[m
+[1m--- a/src/agent.py[m
+[1m+++ b/src/agent.py[m
+[36m@@ -1,7 +1,9 @@[m
+ import json[m
+[32m+[m[32mimport time[m
+[32m+[m
+ from .model_router import MODELS, create_response[m
+ from .tools import TOOLS, execute_tool_call[m
+[31m-[m
+[32m+[m[32mfrom .telemetry import RunTelemetry[m
+ [m
+ class Agent:[m
+     def __init__(self, client, confirm_callback=None):[m
+[36m@@ -86,6 +88,13 @@[m [mclass Agent:[m
+     def revoke_commit_confirmation(self):[m
+         self.commit_confirmed = False[m
+ [m
+[32m+[m[32m    def get_model_name(self):[m
+[32m+[m[32m        if isinstance(MODELS, (list, tuple)):[m
+[32m+[m[32m            if MODELS:[m
+[32m+[m[32m                return MODELS[0][m
+[32m+[m
+[32m+[m[32m        return str(MODELS)[m
+[32m+[m
+     def create_plan(self, prompt):[m
+         planning_instructions = ([m
+             "You are a planning component for a coding agent. "[m
+[36m@@ -111,13 +120,35 @@[m [mclass Agent:[m
+                 "content": prompt,[m
+             }[m
+         ][m
+[31m-        response = create_response([m
+[31m-            self.client,[m
+[31m-            MODELS,[m
+[31m-            planning_instructions,[m
+[31m-            planning_conversation,[m
+[31m-            [],[m
+[31m-        )[m
+[32m+[m[32m        model_started = time.perf_counter()[m
+[32m+[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            response = create_response([m
+[32m+[m[32m                self.client,[m
+[32m+[m[32m                MODELS,[m
+[32m+[m[32m                planning_instructions,[m
+[32m+[m[32m                planning_conversation,[m
+[32m+[m[32m                [],[m
+[32m+[m[32m            )[m
+[32m+[m[32m        except Exception:[m
+[32m+[m[32m            model_duration = time.perf_counter() - model_started[m
+[32m+[m
+[32m+[m[32m            if hasattr(self, "telemetry") and self.telemetry:[m
+[32m+[m[32m                self.telemetry.record_model_call([m
+[32m+[m[32m                    turn=self.telemetry.data["turns"] + 1,[m
+[32m+[m[32m                    duration=model_duration,[m
+[32m+[m[32m                )[m
+[32m+[m
+[32m+[m[32m            raise[m
+[32m+[m
+[32m+[m[32m        model_duration = time.perf_counter() - model_started[m
+[32m+[m
+[32m+[m[32m        if hasattr(self, "telemetry") and self.telemetry:[m
+[32m+[m[32m            self.telemetry.record_model_call([m
+[32m+[m[32m                turn=self.telemetry.data["turns"] + 1,[m
+[32m+[m[32m                duration=model_duration,[m
+[32m+[m[32m                response=response,[m
+[32m+[m[32m            )[m
+         raw = response.output_text.strip()[m
+         if raw.startswith("```"):[m
+             raw = raw.removeprefix("```json").removeprefix("```")[m
+[36m@@ -207,6 +238,27 @@[m [mclass Agent:[m
+         self.display_plan_item(index)[m
+ [m
+     def run(self, prompt):[m
+[32m+[m[32m        self.telemetry = RunTelemetry([m
+[32m+[m[32m            model=self.get_model_name(),[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            result = self._run(prompt)[m
+[32m+[m
+[32m+[m[32m            self.telemetry.finish(status="success")[m
+[32m+[m[32m            print(self.telemetry.summary())[m
+[32m+[m
+[32m+[m[32m            return result[m
+[32m+[m
+[32m+[m[32m        except Exception as error:[m
+[32m+[m[32m            self.telemetry.finish([m
+[32m+[m[32m                status="error",[m
+[32m+[m[32m                error=error,[m
+[32m+[m[32m            )[m
+[32m+[m[32m            print(self.telemetry.summary())[m
+[32m+[m[32m            raise[m
+[32m+[m
+[32m+[m[32m    def _run(self, prompt):[m
+         self.plan = self.create_plan(prompt)[m
+         self.current_plan_index = 0[m
+ [m
+[36m@@ -218,16 +270,31 @@[m [mclass Agent:[m
+             "content": prompt,[m
+         })[m
+ [m
+[31m-        response = create_response([m
+[31m-            self.client,[m
+[31m-            MODELS,[m
+[31m-            self.instructions,[m
+[31m-            self.conversation,[m
+[31m-            TOOLS,[m
+[31m-        )[m
+[32m+[m[32m        # Initial/main model call.[m
+[32m+[m[32m        model_started = time.perf_counter()[m
+ [m
+[32m+[m[32m        try:[m
+[32m+[m[32m            response = create_response([m
+[32m+[m[32m                self.client,[m
+[32m+[m[32m                MODELS,[m
+[32m+[m[32m                self.instructions,[m
+[32m+[m[32m                self.conversation,[m
+[32m+[m[32m                TOOLS,[m
+[32m+[m[32m            )[m
+[32m+[m[32m        except Exception:[m
+[32m+[m[32m            model_duration = time.perf_counter() - model_started[m
+[32m+[m[32m            self.telemetry.record_model_call([m
+[32m+[m[32m                turn=self.telemetry.data["turns"] + 1,[m
+[32m+[m[32m                duration=model_duration,[m
+[32m+[m[32m            )[m
+[32m+[m[32m            raise[m
+[32m+[m[32m        model_duration = time.perf_counter() - model_started[m
+[32m+[m[32m        self.telemetry.record_model_call([m
+[32m+[m[32m            turn=self.telemetry.data["turns"] + 1,[m
+[32m+[m[32m            duration=model_duration,[m
+[32m+[m[32m            response=response,[m
+[32m+[m[32m        )[m
+         iteration = 0[m
+[31m-[m
+         while True:[m
+             if iteration >= self.max_iterations:[m
+                 print([m
+[36m@@ -235,72 +302,70 @@[m [mclass Agent:[m
+                     "maximum tool iterations reached."[m
+                 )[m
+                 return response.output_text[m
+[31m-[m
+             iteration += 1[m
+             tool_outputs = [][m
+[31m-[m
+             # Save model response.[m
+             self.conversation.extend(response.output)[m
+[31m-[m
+             # Show model text accompanying tool calls.[m
+             has_tool_calls = any([m
+                 item.type == "function_call"[m
+                 for item in response.output[m
+             )[m
+[31m-[m
+             if has_tool_calls and response.output_text.strip():[m
+                 print("\nAgent >")[m
+                 print(response.output_text)[m
+[31m-[m
+             # Start the current plan task.[m
+             if ([m
+                 self.plan[m
+                 and self.current_plan_index < len(self.plan)[m
+             ):[m
+                 self.start_plan_task(self.current_plan_index)[m
+[31m-[m
+             for item in response.output:[m
+[31m-[m
+                 if item.type != "function_call":[m
+                     continue[m
+ [m
+                 print(f"\nTool requested: {item.name}")[m
+[31m-[m
+[32m+[m[32m                # Commit requires explicit confirmation.[m
+                 if item.name == "git_commit" and not self.commit_confirmed:[m
+                     if self.confirm_callback is not None:[m
+[31m-                        self.commit_confirmed = bool(self.confirm_callback())[m
+[31m-[m
+[32m+[m[32m                        self.commit_confirmed = bool([m
+[32m+[m[32m                            self.confirm_callback()[m
+[32m+[m[32m                        )[m
+                     if not self.commit_confirmed:[m
+                         tool_result = ([m
+                             "Error: git commit requires explicit confirmation "[m
+                             "after the agent asks for confirmation."[m
+                         )[m
+[32m+[m[32m                        # Record the blocked commit as an error.[m
+[32m+[m[32m                        self.telemetry.record_tool_call([m
+[32m+[m[32m                            item.name,[m
+[32m+[m[32m                            0.0,[m
+[32m+[m[32m                            False,[m
+[32m+[m[32m                        )[m
+                     else:[m
+[31m-                        tool_result = execute_tool_call([m
+[32m+[m[32m                        tool_result = self._execute_tool_with_telemetry([m
+                             item.name,[m
+                             item.arguments,[m
+                         )[m
+                 else:[m
+[31m-                    tool_result = execute_tool_call([m
+[32m+[m[32m                    tool_result = self._execute_tool_with_telemetry([m
+                         item.name,[m
+                         item.arguments,[m
+                     )[m
+[31m-[m
+[31m-                if tool_result.startswith("Error:") or tool_result.startswith("Unknown tool:"):[m
+[32m+[m[32m                if ([m
+[32m+[m[32m                    tool_result.startswith("Error:")[m
+[32m+[m[32m                    or tool_result.startswith("Unknown tool:")[m
+[32m+[m[32m                ):[m
+                     print("\nTool rejected or failed.")[m
+                 else:[m
+                     print("\nTool completed successfully.")[m
+[31m-[m
+                 tool_outputs.append({[m
+                     "type": "function_call_output",[m
+                     "call_id": item.call_id,[m
+                     "output": tool_result,[m
+                 })[m
+[31m-[m
+             # If there were no tool calls, the model has finished.[m
+             if not tool_outputs:[m
+[31m-[m
+[31m-                # Finish only the task that was actually started.[m
+                 if ([m
+                     self.plan[m
+                     and self.current_plan_index < len(self.plan)[m
+[36m@@ -309,9 +374,7 @@[m [mclass Agent:[m
+                 ):[m
+                     self.finish_plan_task(self.current_plan_index)[m
+                     self.current_plan_index += 1[m
+[31m-[m
+                 return response.output_text[m
+[31m-[m
+             # The current task's tool work is complete.[m
+             if ([m
+                 self.plan[m
+[36m@@ -319,15 +382,54 @@[m [mclass Agent:[m
+             ):[m
+                 self.finish_plan_task(self.current_plan_index)[m
+                 self.current_plan_index += 1[m
+[31m-[m
+             # Save tool results.[m
+             self.conversation.extend(tool_outputs)[m
+[31m-[m
+             # Ask the model what to do next.[m
+[31m-            response = create_response([m
+[31m-                self.client,[m
+[31m-                MODELS,[m
+[31m-                self.instructions,[m
+[31m-                self.conversation,[m
+[31m-                TOOLS,[m
+[31m-            )[m
+\ No newline at end of file[m
+[32m+[m[32m            model_started = time.perf_counter()[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                response = create_response([m
+[32m+[m[32m                    self.client,[m
+[32m+[m[32m                    MODELS,[m
+[32m+[m[32m                    self.instructions,[m
+[32m+[m[32m                    self.conversation,[m
+[32m+[m[32m                    TOOLS,[m
+[32m+[m[32m                )[m
+[32m+[m[32m            except Exception:[m
+[32m+[m[32m                model_duration = time.perf_counter() - model_started[m
+[32m+[m[32m                self.telemetry.record_model_call([m
+[32m+[m[32m                    turn=self.telemetry.data["turns"] + 1,[m
+[32m+[m[32m                    duration=model_duration,[m
+[32m+[m[32m                )[m
+[32m+[m[32m                raise[m
+[32m+[m[32m            model_duration = time.perf_counter() - model_started[m
+[32m+[m[32m            self.telemetry.record_model_call([m
+[32m+[m[32m                turn=self.telemetry.data["turns"] + 1,[m
+[32m+[m[32m                duration=model_duration,[m
+[32m+[m[32m                response=response,[m
+[32m+[m[32m            )[m
+[32m+[m[32m    def _execute_tool_with_telemetry(self, name, arguments):[m
+[32m+[m[32m        tool_started = time.perf_counter()[m
+[32m+[m[32m        try:[m
+[32m+[m[32m            tool_result = execute_tool_call([m
+[32m+[m[32m                name,[m
+[32m+[m[32m                arguments,[m
+[32m+[m[32m            )[m
+[32m+[m[32m        except Exception:[m
+[32m+[m[32m            duration = time.perf_counter() - tool_started[m
+[32m+[m[32m            self.telemetry.record_tool_call([m
+[32m+[m[32m                name,[m
+[32m+[m[32m                duration,[m
+[32m+[m[32m                False,[m
+[32m+[m[32m            )[m
+[32m+[m[32m            raise[m
+[32m+[m[32m        duration = time.perf_counter() - tool_started[m
+[32m+[m[32m        success = not ([m
+[32m+[m[32m            tool_result.startswith("Error:")[m
+[32m+[m[32m            or tool_result.startswith("Unknown tool:")[m
+[32m+[m[32m        )[m
+[32m+[m[32m        self.telemetry.record_tool_call([m
+[32m+[m[32m            name,[m
+[32m+[m[32m            duration,[m
+[32m+[m[32m            success,[m
+[32m+[m[32m        )[m
+[32m+[m[32m        return tool_result[m
+\ No newline at end of file[m

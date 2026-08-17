@@ -1,7 +1,9 @@
 import json
+import time
+
 from .model_router import MODELS, create_response
 from .tools import TOOLS, execute_tool_call
-
+from .telemetry import RunTelemetry
 
 class Agent:
     def __init__(self, client, confirm_callback=None):
@@ -86,6 +88,13 @@ class Agent:
     def revoke_commit_confirmation(self):
         self.commit_confirmed = False
 
+    def get_model_name(self):
+        if isinstance(MODELS, (list, tuple)):
+            if MODELS:
+                return MODELS[0]
+
+        return str(MODELS)
+
     def create_plan(self, prompt):
         planning_instructions = (
             "You are a planning component for a coding agent. "
@@ -111,13 +120,35 @@ class Agent:
                 "content": prompt,
             }
         ]
-        response = create_response(
-            self.client,
-            MODELS,
-            planning_instructions,
-            planning_conversation,
-            [],
-        )
+        model_started = time.perf_counter()
+
+        try:
+            response = create_response(
+                self.client,
+                MODELS,
+                planning_instructions,
+                planning_conversation,
+                [],
+            )
+        except Exception:
+            model_duration = time.perf_counter() - model_started
+
+            if hasattr(self, "telemetry") and self.telemetry:
+                self.telemetry.record_model_call(
+                    turn=self.telemetry.data["turns"] + 1,
+                    duration=model_duration,
+                )
+
+            raise
+
+        model_duration = time.perf_counter() - model_started
+
+        if hasattr(self, "telemetry") and self.telemetry:
+            self.telemetry.record_model_call(
+                turn=self.telemetry.data["turns"] + 1,
+                duration=model_duration,
+                response=response,
+            )
         raw = response.output_text.strip()
         if raw.startswith("```"):
             raw = raw.removeprefix("```json").removeprefix("```")
@@ -207,6 +238,27 @@ class Agent:
         self.display_plan_item(index)
 
     def run(self, prompt):
+        self.telemetry = RunTelemetry(
+            model=self.get_model_name(),
+        )
+
+        try:
+            result = self._run(prompt)
+
+            self.telemetry.finish(status="success")
+            print(self.telemetry.summary())
+
+            return result
+
+        except Exception as error:
+            self.telemetry.finish(
+                status="error",
+                error=error,
+            )
+            print(self.telemetry.summary())
+            raise
+
+    def _run(self, prompt):
         self.plan = self.create_plan(prompt)
         self.current_plan_index = 0
 
@@ -218,16 +270,31 @@ class Agent:
             "content": prompt,
         })
 
-        response = create_response(
-            self.client,
-            MODELS,
-            self.instructions,
-            self.conversation,
-            TOOLS,
+        # Initial/main model call.
+        model_started = time.perf_counter()
+
+        try:
+            response = create_response(
+                self.client,
+                MODELS,
+                self.instructions,
+                self.conversation,
+                TOOLS,
+            )
+        except Exception:
+            model_duration = time.perf_counter() - model_started
+            self.telemetry.record_model_call(
+                turn=self.telemetry.data["turns"] + 1,
+                duration=model_duration,
+            )
+            raise
+        model_duration = time.perf_counter() - model_started
+        self.telemetry.record_model_call(
+            turn=self.telemetry.data["turns"] + 1,
+            duration=model_duration,
+            response=response,
         )
-
         iteration = 0
-
         while True:
             if iteration >= self.max_iterations:
                 print(
@@ -235,72 +302,70 @@ class Agent:
                     "maximum tool iterations reached."
                 )
                 return response.output_text
-
             iteration += 1
             tool_outputs = []
-
             # Save model response.
             self.conversation.extend(response.output)
-
             # Show model text accompanying tool calls.
             has_tool_calls = any(
                 item.type == "function_call"
                 for item in response.output
             )
-
             if has_tool_calls and response.output_text.strip():
                 print("\nAgent >")
                 print(response.output_text)
-
             # Start the current plan task.
             if (
                 self.plan
                 and self.current_plan_index < len(self.plan)
             ):
                 self.start_plan_task(self.current_plan_index)
-
             for item in response.output:
-
                 if item.type != "function_call":
                     continue
 
                 print(f"\nTool requested: {item.name}")
-
+                # Commit requires explicit confirmation.
                 if item.name == "git_commit" and not self.commit_confirmed:
                     if self.confirm_callback is not None:
-                        self.commit_confirmed = bool(self.confirm_callback())
-
+                        self.commit_confirmed = bool(
+                            self.confirm_callback()
+                        )
                     if not self.commit_confirmed:
                         tool_result = (
                             "Error: git commit requires explicit confirmation "
                             "after the agent asks for confirmation."
                         )
+                        # Record the blocked commit as an error.
+                        self.telemetry.record_tool_call(
+                            item.name,
+                            0.0,
+                            False,
+                        )
                     else:
-                        tool_result = execute_tool_call(
+                        tool_result = self._execute_tool_with_telemetry(
                             item.name,
                             item.arguments,
                         )
                 else:
-                    tool_result = execute_tool_call(
+                    tool_result = self._execute_tool_with_telemetry(
                         item.name,
                         item.arguments,
                     )
-
-                if tool_result.startswith("Error:") or tool_result.startswith("Unknown tool:"):
+                if (
+                    tool_result.startswith("Error:")
+                    or tool_result.startswith("Unknown tool:")
+                ):
                     print("\nTool rejected or failed.")
                 else:
                     print("\nTool completed successfully.")
-
                 tool_outputs.append({
                     "type": "function_call_output",
                     "call_id": item.call_id,
                     "output": tool_result,
                 })
-
             # If there were no tool calls, the model has finished.
             if not tool_outputs:
-
-                # Finish only the task that was actually started.
                 if (
                     self.plan
                     and self.current_plan_index < len(self.plan)
@@ -309,9 +374,7 @@ class Agent:
                 ):
                     self.finish_plan_task(self.current_plan_index)
                     self.current_plan_index += 1
-
                 return response.output_text
-
             # The current task's tool work is complete.
             if (
                 self.plan
@@ -319,15 +382,54 @@ class Agent:
             ):
                 self.finish_plan_task(self.current_plan_index)
                 self.current_plan_index += 1
-
             # Save tool results.
             self.conversation.extend(tool_outputs)
-
             # Ask the model what to do next.
-            response = create_response(
-                self.client,
-                MODELS,
-                self.instructions,
-                self.conversation,
-                TOOLS,
+            model_started = time.perf_counter()
+            try:
+                response = create_response(
+                    self.client,
+                    MODELS,
+                    self.instructions,
+                    self.conversation,
+                    TOOLS,
+                )
+            except Exception:
+                model_duration = time.perf_counter() - model_started
+                self.telemetry.record_model_call(
+                    turn=self.telemetry.data["turns"] + 1,
+                    duration=model_duration,
+                )
+                raise
+            model_duration = time.perf_counter() - model_started
+            self.telemetry.record_model_call(
+                turn=self.telemetry.data["turns"] + 1,
+                duration=model_duration,
+                response=response,
             )
+    def _execute_tool_with_telemetry(self, name, arguments):
+        tool_started = time.perf_counter()
+        try:
+            tool_result = execute_tool_call(
+                name,
+                arguments,
+            )
+        except Exception:
+            duration = time.perf_counter() - tool_started
+            self.telemetry.record_tool_call(
+                name,
+                duration,
+                False,
+            )
+            raise
+        duration = time.perf_counter() - tool_started
+        success = not (
+            tool_result.startswith("Error:")
+            or tool_result.startswith("Unknown tool:")
+        )
+        self.telemetry.record_tool_call(
+            name,
+            duration,
+            success,
+        )
+        return tool_result
