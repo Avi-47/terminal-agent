@@ -106,16 +106,24 @@ class Agent:
         if raw.startswith("```"):
             raw = raw.removeprefix("```json").removeprefix("```")
             raw = raw.removesuffix("```").strip()
-        plan_data = json.loads(raw)
+        try:
+            plan_data = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(plan_data, dict):
+            return []
         if not plan_data.get("needs_plan"):
             return []
         tasks = plan_data.get("tasks", [])
+        if not isinstance(tasks, list):
+            return []
         return [
             {
                 "task": item["task"],
                 "status": "pending",
             }
             for item in tasks
+            if isinstance(item, dict) and isinstance(item.get("task"), str)
         ]
 
     def display_plan(self):

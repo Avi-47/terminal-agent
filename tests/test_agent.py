@@ -177,3 +177,87 @@ def test_agent_uses_tool_layer_for_rejected_command():
         '{"command": "powershell Get-ChildItem"}',
     )
     assert result == "I cannot run that command."
+
+def test_create_plan_returns_empty_for_invalid_json():
+    agent = make_agent()
+
+    class FakeResponse:
+        output_text = "not valid json"
+
+    import src.agent as agent_module
+    original = agent_module.create_response
+    agent_module.create_response = lambda *args, **kwargs: FakeResponse()
+
+    try:
+        plan = agent.create_plan("Do something")
+    finally:
+        agent_module.create_response = original
+
+    assert plan == []
+
+
+def test_create_plan_returns_empty_for_json_list():
+    agent = make_agent()
+
+    class FakeResponse:
+        output_text = '["not", "an", "object"]'
+
+    import src.agent as agent_module
+    original = agent_module.create_response
+    agent_module.create_response = lambda *args, **kwargs: FakeResponse()
+
+    try:
+        plan = agent.create_plan("Do something")
+    finally:
+        agent_module.create_response = original
+
+    assert plan == []
+
+
+def test_create_plan_returns_empty_for_invalid_tasks():
+    agent = make_agent()
+
+    class FakeResponse:
+        output_text = (
+            '{"needs_plan": true, '
+            '"tasks": "not a list"}'
+        )
+
+    import src.agent as agent_module
+    original = agent_module.create_response
+    agent_module.create_response = lambda *args, **kwargs: FakeResponse()
+
+    try:
+        plan = agent.create_plan("Do something")
+    finally:
+        agent_module.create_response = original
+
+    assert plan == []
+
+
+def test_create_plan_ignores_invalid_task_items():
+    agent = make_agent()
+
+    class FakeResponse:
+        output_text = (
+            '{"needs_plan": true, '
+            '"tasks": ['
+            '{"task": "Inspect code"}, '
+            '{"bad": "item"}, '
+            '"invalid", '
+            '{"task": 123}'
+            ']}'
+        )
+
+    import src.agent as agent_module
+    original = agent_module.create_response
+    agent_module.create_response = lambda *args, **kwargs: FakeResponse()
+
+    try:
+        plan = agent.create_plan("Inspect code")
+    finally:
+        agent_module.create_response = original
+
+    assert plan == [
+        {"task": "Inspect code", "status": "pending"},
+    ]
