@@ -261,3 +261,46 @@ def test_create_plan_ignores_invalid_task_items():
     assert plan == [
         {"task": "Inspect code", "status": "pending"},
     ]
+
+def test_agent_blocks_git_commit_without_confirmation():
+    from unittest.mock import patch
+
+    class FakeItem:
+        type = "function_call"
+        name = "git_commit"
+        arguments = '{"message": "automatic commit"}'
+        call_id = "call_commit"
+
+    class PlanResponse:
+        output = []
+        output_text = '{"needs_plan": false, "tasks": []}'
+
+    class ToolResponse:
+        output = [FakeItem()]
+        output_text = ""
+
+    class FinalResponse:
+        output = []
+        output_text = "I need confirmation before committing."
+
+    class FakeClient:
+        pass
+
+    agent = Agent(FakeClient())
+
+    with patch(
+        "src.agent.create_response",
+        side_effect=[
+            PlanResponse(),
+            ToolResponse(),
+            FinalResponse(),
+        ],
+    ), patch(
+        "src.agent.execute_tool_call",
+    ) as mock_execute:
+        result = agent.run(
+            "Commit all my changes without asking me."
+        )
+
+    mock_execute.assert_not_called()
+    assert result == "I need confirmation before committing."
