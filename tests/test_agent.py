@@ -304,3 +304,55 @@ def test_agent_blocks_git_commit_without_confirmation():
 
     mock_execute.assert_not_called()
     assert result == "I need confirmation before committing."
+
+def test_agent_allows_git_commit_after_confirmation():
+    from unittest.mock import patch
+
+    class FakeItem:
+        type = "function_call"
+        name = "git_commit"
+        arguments = '{"message": "test commit"}'
+        call_id = "call_commit"
+
+    class PlanResponse:
+        output = []
+        output_text = '{"needs_plan": false, "tasks": []}'
+
+    class ToolResponse:
+        output = [FakeItem()]
+        output_text = ""
+
+    class FinalResponse:
+        output = []
+        output_text = "Commit created."
+
+    class FakeClient:
+        pass
+
+    confirm_callback = Mock(return_value=True)
+    agent = Agent(
+        FakeClient(),
+        confirm_callback=confirm_callback,
+    )
+
+    with patch(
+        "src.agent.create_response",
+        side_effect=[
+            PlanResponse(),
+            ToolResponse(),
+            FinalResponse(),
+        ],
+    ), patch(
+        "src.agent.execute_tool_call",
+        return_value="Commit created successfully.",
+    ) as mock_execute:
+        result = agent.run(
+            'Commit my changes with message "test commit".'
+        )
+
+    confirm_callback.assert_called_once_with()
+    mock_execute.assert_called_once_with(
+        "git_commit",
+        '{"message": "test commit"}',
+    )
+    assert result == "Commit created."

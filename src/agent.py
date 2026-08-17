@@ -6,12 +6,12 @@ from .tools import TOOLS, execute_tool_call
 class Agent:
     def __init__(self, client, confirm_callback=None):
         self.client = client
+        self.confirm_callback = confirm_callback
+        self.commit_confirmed = False
         self.conversation = []
         self.max_iterations = 10
         self.plan = []
         self.current_plan_index = 0
-        self.confirm_callback = confirm_callback
-        self.commit_confirmed = False
 
         self.instructions = (
             "You are a helpful coding assistant. "
@@ -267,10 +267,19 @@ class Agent:
                 print(f"\nTool requested: {item.name}")
 
                 if item.name == "git_commit" and not self.commit_confirmed:
-                    tool_result = (
-                        "Error: git commit requires explicit confirmation "
-                        "after the agent asks for confirmation."
-                    )
+                    if self.confirm_callback is not None:
+                        self.commit_confirmed = bool(self.confirm_callback())
+
+                    if not self.commit_confirmed:
+                        tool_result = (
+                            "Error: git commit requires explicit confirmation "
+                            "after the agent asks for confirmation."
+                        )
+                    else:
+                        tool_result = execute_tool_call(
+                            item.name,
+                            item.arguments,
+                        )
                 else:
                     tool_result = execute_tool_call(
                         item.name,
