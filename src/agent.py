@@ -246,8 +246,10 @@ class Agent:
                     item.name,
                     item.arguments,
                 )
-
-                print("\nTool completed successfully.")
+                if tool_result.startswith("Error:") or tool_result.startswith("Unknown tool:"):
+                    print("\nTool rejected or failed.")
+                else:
+                    print("\nTool completed successfully.")
 
                 tool_outputs.append({
                     "type": "function_call_output",

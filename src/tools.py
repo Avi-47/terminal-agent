@@ -7,6 +7,13 @@ ALLOWED_COMMANDS = {
     "python.exe",
 }
 
+DESTRUCTIVE_COMMANDS = {
+    "rm",
+    "del",
+    "format",
+    "shutdown",
+}
+
 def validate_command(args):
     """
     Validate the parsed command before execution.
@@ -17,10 +24,10 @@ def validate_command(args):
     if not args:
         return "Error: command must not be empty."
     program = Path(args[0]).name.lower()
+    if program in DESTRUCTIVE_COMMANDS:
+        return f"Error: destructive command is not allowed: {program}"
     if program not in ALLOWED_COMMANDS:
         return f"Error: command is not allowed: {program}"
-    # Python is allowed, but do not allow it to launch
-    # operating-system commands or subprocesses.
     command_text = " ".join(args).lower()
     dangerous_patterns = (
         "os.system",
@@ -327,6 +334,9 @@ def git_commit(message):
     """
     Commit staged changes using the supplied commit message.
     """
+    if not isinstance(message, str):
+        return "Error: commit message must be a string."
+
     if not message or not message.strip():
         return "Error: commit message must not be empty."
 

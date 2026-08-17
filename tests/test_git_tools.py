@@ -35,13 +35,13 @@ def test_run_command_rejects_cmd():
 def test_run_command_rejects_rm():
     result = run_command("rm -rf .")
     assert result.startswith(
-        "Error: command is not allowed:"
+        "Error: destructive command is not allowed:"
     )
 
 def test_run_command_rejects_del():
     result = run_command("del *")
     assert result.startswith(
-        "Error: command is not allowed:"
+        "Error: destructive command is not allowed:"
     )
 
 def test_run_command_rejects_empty_command():
@@ -318,3 +318,12 @@ def test_git_commit_is_not_automatically_triggered_by_registration():
 
     assert "explicitly asks" in description
     assert "automatically" in description
+
+def test_git_add_does_not_call_git_for_outside_path():
+    with patch("src.tools.subprocess.run") as mock_run:
+        result = git_add(["../../outside.txt"])
+
+    assert result.startswith(
+        "Error: path is outside the workspace:"
+    )
+    mock_run.assert_not_called()
