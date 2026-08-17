@@ -6,6 +6,7 @@ ALLOWED_COMMANDS = {
     "python",
     "python.exe",
 }
+
 def validate_command(args):
     """
     Validate the parsed command before execution.
@@ -18,6 +19,18 @@ def validate_command(args):
     program = Path(args[0]).name.lower()
     if program not in ALLOWED_COMMANDS:
         return f"Error: command is not allowed: {program}"
+    # Python is allowed, but do not allow it to launch
+    # operating-system commands or subprocesses.
+    command_text = " ".join(args).lower()
+    dangerous_patterns = (
+        "os.system",
+        "os.popen",
+        "subprocess",
+        "shutil.",
+    )
+    for pattern in dangerous_patterns:
+        if pattern in command_text:
+            return f"Error: command is not allowed: {pattern}"
     return None
 
 # terminal-agent/
@@ -587,21 +600,24 @@ def execute_tool(name, arguments):
     """
     Execute a tool requested by the LLM using the tool registry.
     """
-
     tool_function = TOOL_FUNCTIONS.get(name)
-
     if tool_function is None:
         return f"Unknown tool: {name}"
-
+    if not isinstance(arguments, dict):
+        return "Error: tool arguments must be a JSON object."
     try:
         return tool_function(**arguments)
     except TypeError as e:
+        return f"Error executing tool '{name}': {e}"
+    except (ValueError, OSError, AttributeError) as e:
         return f"Error executing tool '{name}': {e}"
 
 def execute_tool_call(name, arguments_json):
     """
     Parse JSON arguments and execute the requested tool.
     """
+    if not isinstance(arguments_json, str):
+        return "Error: tool arguments must be a JSON string."
     try:
         arguments = json.loads(arguments_json)
     except json.JSONDecodeError:

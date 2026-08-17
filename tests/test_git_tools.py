@@ -2,13 +2,86 @@ import subprocess
 from unittest.mock import patch
 
 from src.tools import (
+    read_file,
+    write_file,
+    list_files,
+    search_files,
     git_add,
     git_commit,
     git_diff,
     TOOL_FUNCTIONS,
     TOOLS,
 )
+from src.tools import run_command
 
+def test_run_command_rejects_git():
+    result = run_command("git status")
+    assert result.startswith(
+        "Error: command is not allowed:"
+    )
+
+def test_run_command_rejects_powershell():
+    result = run_command("powershell Get-ChildItem")
+    assert result.startswith(
+        "Error: command is not allowed:"
+    )
+
+def test_run_command_rejects_cmd():
+    result = run_command("cmd /c dir")
+    assert result.startswith(
+        "Error: command is not allowed:"
+    )
+
+def test_run_command_rejects_rm():
+    result = run_command("rm -rf .")
+    assert result.startswith(
+        "Error: command is not allowed:"
+    )
+
+def test_run_command_rejects_del():
+    result = run_command("del *")
+    assert result.startswith(
+        "Error: command is not allowed:"
+    )
+
+def test_run_command_rejects_empty_command():
+    assert run_command("") == "Error: command must not be empty."
+
+def test_read_file_rejects_path_outside_workspace():
+    result = read_file("../../secret.txt")
+    assert result.startswith(
+        "Error: path is outside the workspace:"
+    )
+
+def test_write_file_rejects_path_outside_workspace():
+    result = write_file(
+        "../../secret.txt",
+        "malicious content",
+    )
+    assert result.startswith(
+        "Error: path is outside the workspace:"
+    )
+
+def test_list_files_rejects_path_outside_workspace():
+    result = list_files("../../")
+    assert result.startswith(
+        "Error: path is outside the workspace:"
+    )
+
+def test_search_files_rejects_path_outside_workspace():
+    result = search_files(
+        "password",
+        "../../",
+    )
+    assert result.startswith(
+        "Error: path is outside the workspace:"
+    )
+
+def test_read_file_rejects_absolute_path_outside_workspace():
+    result = read_file("C:\\Windows\\System32\\drivers\\etc\\hosts")
+    assert result.startswith(
+        "Error: path is outside the workspace:"
+    )
 
 def make_git_result(returncode=0, stdout="", stderr=""):
     return subprocess.CompletedProcess(
