@@ -15,10 +15,11 @@ from eval.results import (
 created_workspace = None
 
 class FakeAgent:
-    def __init__(self, client, workspace):
+    def __init__(self, client, workspace=None, use_repo_context=True,):
         global created_workspace
         created_workspace = workspace
         self.workspace = workspace
+        self.use_repo_context = use_repo_context
 
     def run(self, prompt):
         file_path = self.workspace / "hello.py"
@@ -39,10 +40,11 @@ class FakeTelemetry:
         }
 
 class FakeAgentWithTelemetry(FakeAgent):
-    def __init__(self, client, workspace):
+    def __init__(self, client, workspace=None, use_repo_context=True,):
         super().__init__(
             client,
             workspace,
+            use_repo_context,
         )
         self.telemetry = FakeTelemetry()
 
@@ -331,7 +333,7 @@ def test_load_tasks():
         / "tasks.json"
     )
     tasks = load_tasks(tasks_path)
-    assert len(tasks) == 10
+    assert len(tasks) == 13
 
 def test_load_tasks_rejects_missing_field(tmp_path):
     tasks_path = tmp_path / "tasks.json"
@@ -437,7 +439,7 @@ def test_evaluation_tasks_have_required_fields():
         tasks = json.load(file)
 
     assert isinstance(tasks, list)
-    assert len(tasks) == 10
+    assert len(tasks) == 13
 
     for task in tasks:
         assert "task_id" in task

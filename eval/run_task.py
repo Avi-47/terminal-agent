@@ -5,7 +5,7 @@ from .workspace import (
 )
 from src.agent import Agent
 
-def run_task(task, client, agent_factory=Agent):
+def run_task(task,client,agent_factory=Agent,use_repo_context=True,):
     workspace = create_workspace(
         task["setup"]
     )
@@ -13,6 +13,7 @@ def run_task(task, client, agent_factory=Agent):
         agent = agent_factory(
             client,
             workspace=workspace,
+            use_repo_context=use_repo_context,
         )
         response = agent.run(
             task["description"]

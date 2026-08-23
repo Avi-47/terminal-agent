@@ -2,20 +2,53 @@ import json
 import time
 
 from .model_router import MODELS, create_response
-from .tools import (TOOLS, execute_tool_call, set_workspace_root,)
+from . import tools
+from .tools import (TOOLS,execute_tool_call,set_workspace_root,)
 from .telemetry import RunTelemetry
-
+from .repo_context import (
+    build_repository_map,
+    retrieve_relevant_files,
+    format_repository_context,
+    find_relevant_files,
+)
 class Agent:
-    def __init__(self, client, confirm_callback=None, workspace=None):
+    def __init__(
+        self,
+        client,
+        confirm_callback=None,
+        workspace=None,
+        use_repo_context=True,
+    ):
         self.client = client
+
         if workspace is not None:
             set_workspace_root(workspace)
+
         self.confirm_callback = confirm_callback
         self.commit_confirmed = False
         self.conversation = []
         self.max_iterations = 10
+
+        self.use_repo_context = use_repo_context
+
+        # ALWAYS initialize this
+        self.repo_context = []
+
+        # Only build repository context when a workspace exists
+        if self.use_repo_context and workspace is not None:
+            try:
+                self.repo_context = build_repository_map(
+                    workspace
+                )
+            except (OSError, ValueError):
+                self.repo_context = []
+
         self.plan = []
         self.current_plan_index = 0
+
+        self.repository_context = ""
+        self.repository_top_k = 3
+        self.repository_context_max_characters = 2000
 
         self.instructions = (
             "You are a helpful coding assistant. "
@@ -111,6 +144,29 @@ class Agent:
         self.commit_confirmed = bool(confirmed)
         return self.commit_confirmed
 
+    def get_workspace_root(self):
+        return tools.WORKSPACE_ROOT
+
+    def build_repository_context(self, prompt):
+        """
+        Build lightweight repository context relevant to the user request.
+        """
+        repository_map = build_repository_map(
+            self.get_workspace_root()
+        )
+        relevant_entries = retrieve_relevant_files(
+            repository_map,
+            prompt,
+            top_k=self.repository_top_k,
+        )
+        return format_repository_context(
+            relevant_entries,
+            max_files=self.repository_top_k,
+            max_characters=(
+                self.repository_context_max_characters
+            ),
+        )
+
     def confirm_commit(self):
         self.commit_confirmed = True
 
@@ -123,6 +179,56 @@ class Agent:
                 return MODELS[0]
 
         return str(MODELS)
+
+    def get_repo_context_instruction(self, prompt):
+        """
+        Build targeted repository context for the current user request.
+        """
+        if not self.use_repo_context:
+            return ""
+
+        if not self.repo_context:
+            return ""
+
+        relevant_files = find_relevant_files(
+            self.repo_context,
+            prompt,
+        )
+
+        if not relevant_files:
+            return ""
+
+        context_lines = []
+
+        for item in relevant_files:
+            path = item.get("path", "")
+            classes = item.get("classes", [])
+            functions = item.get("functions", [])
+
+            context_lines.append(
+                {
+                    "path": path,
+                    "classes": classes,
+                    "functions": functions,
+                }
+            )
+
+        return (
+            "\n\nRELEVANT REPOSITORY CONTEXT:\n"
+            + json.dumps(
+                context_lines,
+                indent=2,
+            )
+            + "\n\n"
+            + (
+                "The repository context above identifies files that are likely "
+                "relevant to the user's request. Use it to guide exploration. "
+                "When a specific relevant file is strongly indicated, prefer "
+                "read_file on that file instead of unnecessarily searching the "
+                "entire codebase. Repository context is a hint, not a substitute "
+                "for inspecting file contents before modifying code."
+            )
+        )
 
     def create_plan(self, prompt):
         planning_instructions = (
@@ -301,6 +407,12 @@ class Agent:
             raise
 
     def _run(self, prompt):
+        self.repository_context = (
+            self.build_repository_context(prompt)
+        )
+        repo_context_instruction = (
+            self.get_repo_context_instruction(prompt)
+        )
         self.plan = self.create_plan(prompt)
         self.current_plan_index = 0
 
@@ -319,7 +431,11 @@ class Agent:
             response = create_response(
                 self.client,
                 MODELS,
-                self.instructions + self.get_current_plan_instruction(),
+                (
+                    self.instructions
+                    + repo_context_instruction
+                    + self.get_current_plan_instruction()
+                ),
                 self.conversation,
                 TOOLS,
             )
@@ -427,7 +543,7 @@ class Agent:
                     response = create_response(
                         self.client,
                         MODELS,
-                        self.instructions + self.get_current_plan_instruction(),
+                        self.get_model_instructions(),
                         self.conversation,
                         TOOLS,
                     )
@@ -453,7 +569,7 @@ class Agent:
                 response = create_response(
                     self.client,
                     MODELS,
-                    self.instructions + self.get_current_plan_instruction(),
+                    self.get_model_instructions(),
                     self.conversation,
                     TOOLS,
                 )
@@ -470,6 +586,25 @@ class Agent:
                 duration=model_duration,
                 response=response,
             )
+
+    def get_model_instructions(self):
+        parts = [
+            self.instructions,
+        ]
+        if self.repository_context:
+            parts.append(
+                "\n"
+                + self.repository_context
+            )
+        current_plan_instruction = (
+            self.get_current_plan_instruction()
+        )
+        if current_plan_instruction:
+            parts.append(
+                current_plan_instruction
+            )
+        return "\n".join(parts)
+
     def _execute_tool_with_telemetry(self, name, arguments):
         tool_started = time.perf_counter()
         try:

@@ -60,6 +60,52 @@
     }
   },
   {
+    "task_id": "repo_context_find_fallback",
+    "description": "Find where the model fallback logic is implemented and report the file path.",
+    "setup": {
+        "files": {
+        "src/model_router.py": "def create_response(client, models):\n    for model in models:\n        try:\n            return client.responses.create(model=model)\n        except Exception:\n            continue\n    raise RuntimeError('All models failed')\n",
+        "src/agent.py": "from src.model_router import create_response\n\ndef run_agent(client, models):\n    return create_response(client, models)\n",
+        "src/tools.py": "def read_file(path):\n    pass\n"
+        }
+    },
+    "success_condition": {
+        "type": "response_contains",
+        "text": "src/model_router.py"
+    }
+  },
+  {
+    "task_id": "repo_context_modify_command_safety",
+    "description": "Find the function responsible for command safety and modify it so that the command 'echo' is also rejected.",
+    "setup": {
+        "files": {
+        "src/tools.py": "ALLOWED = {'python'}\n\ndef validate_command(command):\n    if command in ALLOWED:\n        return True\n    return False\n",
+        "src/agent.py": "def run_agent():\n    return 'running'\n",
+        "src/model_router.py": "def create_response():\n    return None\n"
+        }
+    },
+    "success_condition": {
+        "type": "file_contains",
+        "path": "src/tools.py",
+        "text": "echo"
+    }
+  },
+  {
+    "task_id": "repo_context_find_tool_execution",
+    "description": "Find where tool execution is implemented and report the file path.",
+    "setup": {
+        "files": {
+        "src/tools.py": "def execute_tool_call(name, arguments):\n    return execute_tool(name, arguments)\n",
+        "src/agent.py": "class Agent:\n    def run(self):\n        return None\n",
+        "src/config.py": "MAX_ITERATIONS = 10\n"
+        }
+    },
+    "success_condition": {
+        "type": "response_contains",
+        "text": "src/tools.py"
+    }
+  },
+  {
     "task_id": "search_codebase",
     "description": "Search the project for the function calculate_total. After using the search tool, report the file path where the function was found.",
     "setup": {
