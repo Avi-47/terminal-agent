@@ -41,7 +41,22 @@ def validate_command(args):
     return None
 
 # terminal-agent/
-WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
+WORKSPACE_ROOT = DEFAULT_WORKSPACE_ROOT
+
+def set_workspace_root(path):
+    global WORKSPACE_ROOT
+    workspace = Path(path).resolve()
+    if not workspace.exists():
+        raise ValueError(
+            f"workspace does not exist: {path}"
+        )
+    if not workspace.is_dir():
+        raise ValueError(
+            f"workspace is not a directory: {path}"
+        )
+    WORKSPACE_ROOT = workspace
+
 def resolve_workspace_path(path):
     """
     Resolve a path relative to the agent workspace.

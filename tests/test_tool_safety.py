@@ -3,6 +3,32 @@ from src.tools import (
     run_command,
     git_commit,
 )
+import src.tools as tools
+
+def test_set_workspace_root(tmp_path):
+    original_workspace = tools.WORKSPACE_ROOT
+    try:
+        tools.set_workspace_root(tmp_path)
+        assert tools.WORKSPACE_ROOT == tmp_path.resolve()
+    finally:
+        tools.set_workspace_root(original_workspace)
+        
+def test_file_tools_use_configured_workspace(tmp_path):
+    original_workspace = tools.WORKSPACE_ROOT
+    try:
+        tools.set_workspace_root(tmp_path)
+        result = tools.write_file(
+            "hello.py",
+            "print('Hello')",
+        )
+        assert "Successfully wrote file" in result
+        created_file = tmp_path / "hello.py"
+        assert created_file.exists()
+        assert created_file.read_text(encoding="utf-8") == "print('Hello')"
+
+    finally:
+        tools.set_workspace_root(original_workspace)
+
 def test_execute_tool_call_rejects_invalid_json():
     result = execute_tool_call(
         "read_file",

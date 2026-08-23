@@ -2,12 +2,14 @@ import json
 import time
 
 from .model_router import MODELS, create_response
-from .tools import TOOLS, execute_tool_call
+from .tools import (TOOLS, execute_tool_call, set_workspace_root,)
 from .telemetry import RunTelemetry
 
 class Agent:
-    def __init__(self, client, confirm_callback=None):
+    def __init__(self, client, confirm_callback=None, workspace=None):
         self.client = client
+        if workspace is not None:
+            set_workspace_root(workspace)
         self.confirm_callback = confirm_callback
         self.commit_confirmed = False
         self.conversation = []
@@ -22,7 +24,20 @@ class Agent:
             "If you need information that available tools cannot provide, "
             "explain the limitation instead. "
 
-            "For simple requests, act directly without unnecessary planning. "
+            "For each plan step, complete the actual action described by that step "
+            "before moving to the next step. Tool calls are not automatically equivalent "
+            "to completing a plan step. For example, list_files does not complete a "
+            "'read file' step, and read_file does not complete a 'modify file' step. "
+            "If a plan step says to modify or create a file, you must actually call "
+            "write_file with the required complete contents. "
+            "If a plan step says to verify a program, you must actually run the "
+            "appropriate verification command. "
+            "Do not claim or assume a plan step is complete merely because a related "
+            "tool call succeeded. "
+
+            "When the requested file path is already known, use read_file directly. "
+            "Do not use list_files merely to confirm that a known file exists. "
+            "Use list_files only when the relevant file or directory is unknown. "
 
             "For any multi-step coding task, before making the first tool call, "
             "output a short section beginning exactly with 'Plan:' followed by "
@@ -36,7 +51,9 @@ class Agent:
 
             "When the user asks you to search, find, locate, or look for text "
             "inside the project or codebase, use search_files. Do not use "
-            "run_command for codebase searching. "
+            "run_command for codebase searching. After receiving search results, "
+            "summarize the relevant matches in your final response, including the "
+            "file path when the user asks where something is located. "
 
             "When a dedicated tool exists for an operation, use that dedicated "
             "tool instead of attempting the same operation through run_command. "
@@ -70,8 +87,20 @@ class Agent:
             "After a successful verification that satisfies the user's request, "
             "stop making unnecessary changes or repeated verification calls. "
 
-            "Do not claim that a coding task is complete until you have "
-            "performed appropriate verification when verification is possible."
+            "When a task requires creating or modifying a file, do not use list_files "
+            "as a substitute for the modification. After inspecting the file if needed, "
+            "you MUST call write_file with the complete intended file contents. "
+            "For an existing-file modification, the normal sequence is: "
+            "read_file -> determine the corrected contents -> write_file -> verify. "
+            "Do not stop after read_file. Do not report completion until write_file "
+            "has returned successfully. "
+
+            "When a file path is explicitly known, do not call list_files before "
+            "read_file. "
+            "After read_file on an existing-file modification, you must call "
+            "write_file with the complete corrected file contents. "
+            "After write_file succeeds, run an appropriate verification command "
+            "when possible. "
         )
 
     def request_commit_confirmation(self):
@@ -225,6 +254,19 @@ class Agent:
 
         self.plan[index]["status"] = status
 
+    def get_current_plan_instruction(self):
+        if not self.plan:
+            return ""
+        if self.current_plan_index >= len(self.plan):
+            return ""
+        task = self.plan[self.current_plan_index]["task"]
+        return (
+            "\nCURRENT PLAN TASK:\n"
+            f"{task}\n"
+            "\nComplete this task before moving to the next plan task. "
+            "Do not treat an unrelated tool call as completion of this task. "
+        )
+
     def start_plan_task(self, index):
         if not self.plan:
             return
@@ -277,7 +319,7 @@ class Agent:
             response = create_response(
                 self.client,
                 MODELS,
-                self.instructions,
+                self.instructions + self.get_current_plan_instruction(),
                 self.conversation,
                 TOOLS,
             )
@@ -364,7 +406,7 @@ class Agent:
                     "call_id": item.call_id,
                     "output": tool_result,
                 })
-            # If there were no tool calls, the model has finished.
+            # If there were no tool calls, check if tasks remain.
             if not tool_outputs:
                 if (
                     self.plan
@@ -374,14 +416,35 @@ class Agent:
                 ):
                     self.finish_plan_task(self.current_plan_index)
                     self.current_plan_index += 1
-                return response.output_text
-            # The current task's tool work is complete.
-            if (
-                self.plan
-                and self.current_plan_index < len(self.plan)
-            ):
-                self.finish_plan_task(self.current_plan_index)
-                self.current_plan_index += 1
+                
+                # Only return if no more tasks remain
+                if not self.plan or self.current_plan_index >= len(self.plan):
+                    return response.output_text
+                
+                # Otherwise, ask the model to continue with the next task
+                model_started = time.perf_counter()
+                try:
+                    response = create_response(
+                        self.client,
+                        MODELS,
+                        self.instructions + self.get_current_plan_instruction(),
+                        self.conversation,
+                        TOOLS,
+                    )
+                except Exception:
+                    model_duration = time.perf_counter() - model_started
+                    self.telemetry.record_model_call(
+                        turn=self.telemetry.data["turns"] + 1,
+                        duration=model_duration,
+                    )
+                    raise
+                model_duration = time.perf_counter() - model_started
+                self.telemetry.record_model_call(
+                    turn=self.telemetry.data["turns"] + 1,
+                    duration=model_duration,
+                    response=response,
+                )
+                continue
             # Save tool results.
             self.conversation.extend(tool_outputs)
             # Ask the model what to do next.
@@ -390,7 +453,7 @@ class Agent:
                 response = create_response(
                     self.client,
                     MODELS,
-                    self.instructions,
+                    self.instructions + self.get_current_plan_instruction(),
                     self.conversation,
                     TOOLS,
                 )

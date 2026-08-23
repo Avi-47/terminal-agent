@@ -1,6 +1,37 @@
 from unittest.mock import Mock
 import pytest
 from src.agent import Agent
+import src.tools as tools
+
+def test_agent_can_configure_workspace(tmp_path):
+    original_workspace = tools.WORKSPACE_ROOT
+    try:
+        Agent(
+            client=None,
+            workspace=tmp_path,
+        )
+        assert tools.WORKSPACE_ROOT == tmp_path.resolve()
+    finally:
+        tools.set_workspace_root(original_workspace)
+
+def test_agent_workspace_is_used_by_file_tools(tmp_path):
+    import src.tools as tools
+    original_workspace = tools.WORKSPACE_ROOT
+    try:
+        Agent(
+            client=None,
+            workspace=tmp_path,
+        )
+        result = tools.write_file(
+            "hello.py",
+            "print('Hello')",
+        )
+        assert "Successfully wrote file" in result
+        hello_file = tmp_path / "hello.py"
+        assert hello_file.exists()
+        assert hello_file.read_text(encoding="utf-8") == "print('Hello')"
+    finally:
+        tools.set_workspace_root(original_workspace)
 
 def make_agent():
     return Agent(Mock())
