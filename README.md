@@ -43,8 +43,8 @@ Most coding agents can be described as a loop around an LLM:
                     ┌─────────────────────────────────┐
                     │              Tools              │
                     │                                 │
-                    │  read  write  search  execute  │
-                    │  git   status  diff    commit  │
+                    │  read  write  search  execute   │
+                    │  git   status  diff    commit   │ 
                     └────────────────┬────────────────┘
                                      │
                                      ▼
@@ -60,13 +60,12 @@ Most coding agents can be described as a loop around an LLM:
                          │        Agent         │
                          │                      │
                          │  Observe result      │
-                         │  Continue / revise  │
+                         │  Continue / revise   │
                          └──────────┬───────────┘
                                     │
-                                    └───────────────┐
-                                                    │
-                                                    ▼
-                                             Next iteration
+                                    │
+                                    ▼
+                              Next iteration
 ```
 
 The result is a small but complete coding-agent architecture rather than a collection of disconnected LLM calls.
@@ -85,7 +84,7 @@ The agent supports the core workflow expected from a terminal coding assistant.
 │  Understand       Plan          Inspect         Modify       │
 │      │              │              │               │         │
 │      ▼              ▼              ▼               ▼         │
-│   Task        Structured Plan   Repository      Files       │
+│   Task        Structured Plan   Repository      Files        │
 │                                                              │
 │                                                              │
 │  Execute         Validate       Recover         Observe      │
@@ -196,7 +195,7 @@ At the center of the project is the agent loop.
                         ▼
              ┌─────────────────────┐
              │   Create / Update   │
-             │       Plan         │
+             │       Plan          │
              └──────────┬──────────┘
                         │
                         ▼
@@ -205,12 +204,12 @@ At the center of the project is the agent loop.
              └──────────┬──────────┘
                         │
                         ▼
-                ┌───────────────┐
-                │ Tool required?│
-                └───────┬───────┘
-                    Yes │   │ No
-                        │   │
-                        ▼   ▼
+                 ┌───────────────┐
+                 │ Tool required?│
+                 └───────┬───────┘
+                  Yes │      │ No
+                      │      │
+                      ▼      ▼
               ┌───────────┐ ┌──────────────┐
               │ Execute   │ │ Return final │
               │ Tool      │ │ response     │
@@ -222,10 +221,9 @@ At the center of the project is the agent loop.
               │  Result   │
               └─────┬─────┘
                     │
-                    └───────────────┐
-                                    │
-                                    ▼
-                              Next iteration
+                    │
+                    ▼
+             Next iteration
 ```
 
 This loop allows the model to operate on the repository incrementally rather than attempting to solve the entire task in one response.
@@ -371,7 +369,7 @@ The project therefore treats tool execution as a security boundary.
                            │
                            ▼
                   ┌─────────────────┐
-                  │   Tool Request   │
+                  │   Tool Request  │
                   └────────┬────────┘
                            │
                            ▼
@@ -599,7 +597,7 @@ A natural next extension is a lightweight reviewer/revision loop.
                        │              │
                        │ Tests        │
                        │ Commands     │
-                       │ Diff        │
+                       │ Diff         │
                        └──────┬───────┘
                               │
                        ┌──────┴──────┐
@@ -621,14 +619,12 @@ A natural next extension is a lightweight reviewer/revision loop.
                               │  Revision  │
                               └─────┬──────┘
                                     │
-                                    └─────────────┐
-                                                  │
-                                                  ▼
-                                             Validate
+                                    │
+                                    ▼
+                                 Validate
 ```
 
 The reviewer does not need to become an independent autonomous agent.
-
 A simple implementation can:
 
 1. Inspect the generated diff
@@ -826,7 +822,7 @@ The goal is to understand the systems that make coding agents work.
                                   ▼
                          ┌──────────────────┐
                          │ Repository       │
-                         │ Context         │
+                         │ Context          │
                          └────────┬─────────┘
                                   │
                                   ▼
@@ -882,7 +878,7 @@ The system assists with repository management without silently taking irreversib
 │  Automated Tests                 143 passed                │
 │                                                            │
 │  Evaluation                      13 / 13 passed            │
-│                                   100% success              │
+│                                   100% success             │
 │                                                            │
 │  Repository Context              66.7% → 100%              │
 │  Pass Rate                                                 │
