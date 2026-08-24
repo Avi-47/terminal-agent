@@ -3,8 +3,18 @@ import time
 
 from .model_router import MODELS, create_response
 from . import tools
-from .tools import (TOOLS,execute_tool_call,set_workspace_root,)
+from .tools import (
+    TOOLS,
+    execute_tool_call,
+    git_diff,
+    git_status,
+    set_workspace_root,
+)
 from .telemetry import RunTelemetry
+from .reviewer import (
+    REVIEW_INSTRUCTIONS,
+    parse_review_response,
+)
 from .repo_context import (
     build_repository_map,
     retrieve_relevant_files,
@@ -18,22 +28,20 @@ class Agent:
         confirm_callback=None,
         workspace=None,
         use_repo_context=True,
+        enable_reviewer=False,
     ):
         self.client = client
-
         if workspace is not None:
             set_workspace_root(workspace)
-
         self.confirm_callback = confirm_callback
         self.commit_confirmed = False
         self.conversation = []
         self.max_iterations = 10
-
+        self.max_review_cycles = 1
+        self.enable_reviewer = enable_reviewer
         self.use_repo_context = use_repo_context
-
         # ALWAYS initialize this
         self.repo_context = []
-
         # Only build repository context when a workspace exists
         if self.use_repo_context and workspace is not None:
             try:
@@ -45,11 +53,9 @@ class Agent:
 
         self.plan = []
         self.current_plan_index = 0
-
         self.repository_context = ""
         self.repository_top_k = 3
         self.repository_context_max_characters = 2000
-
         self.instructions = (
             "You are a helpful coding assistant. "
             "Only use tools that are explicitly provided to you. "
@@ -385,19 +391,180 @@ class Agent:
         self.update_plan_status(index, "done")
         self.display_plan_item(index)
 
+    def capture_workspace_baseline(self):
+        """
+        Capture the Git state before an agent run.
+        This allows the reviewer to distinguish changes made during
+        the current agent run from changes that already existed.
+        """
+        return {
+            "git_status": git_status(),
+            "git_diff": git_diff(),
+        }
+
+    def build_review_context(self, prompt, agent_result, baseline,):
+        """
+        Build evidence for the independent reviewer.
+        Existing workspace changes from before the agent run are
+        separated from changes observed after the run.
+        """
+        current_status = git_status()
+        current_diff = git_diff()
+        baseline_diff = baseline.get(
+            "git_diff",
+            "",
+        )
+        if current_diff == baseline_diff:
+            agent_changes = (
+                "No unstaged Git diff changes were detected during "
+                "this agent run."
+            )
+        else:
+            agent_changes = current_diff
+        return {
+            "user_request": prompt,
+            "agent_result": agent_result,
+            "baseline_git_status": baseline.get(
+                "git_status",
+                "",
+            ),
+            "current_git_status": current_status,
+            "agent_run_changes": agent_changes,
+        }
+    
+    def review_result(self, prompt, agent_result, baseline,):
+        """
+        Ask an independent LLM call to review the completed agent work.
+        """
+        review_context = self.build_review_context(
+            prompt,
+            agent_result,
+            baseline,
+        )
+        review_conversation = [
+            {
+                "role": "user",
+                "content": json.dumps(
+                    review_context,
+                    indent=2,
+                ),
+            }
+        ]
+        model_started = time.perf_counter()
+        try:
+            response = create_response(
+                self.client,
+                MODELS,
+                REVIEW_INSTRUCTIONS,
+                review_conversation,
+                [],
+            )
+        except Exception:
+            model_duration = (
+                time.perf_counter() - model_started
+            )
+            if hasattr(self, "telemetry") and self.telemetry:
+                self.telemetry.record_model_call(
+                    turn=self.telemetry.data["turns"] + 1,
+                    duration=model_duration,
+                )
+            raise
+        model_duration = time.perf_counter() - model_started
+        if hasattr(self, "telemetry") and self.telemetry:
+            self.telemetry.record_model_call(
+                turn=self.telemetry.data["turns"] + 1,
+                duration=model_duration,
+                response=response,
+            )
+        review = parse_review_response(
+            response.output_text
+        )
+        print("\nReviewer >")
+        print(
+            f"Decision: {review['decision']}"
+        )
+        print(
+            f"Reason: {review['reason']}"
+        )
+        return review
+
+    def build_revision_prompt(self, original_prompt, review,):
+        """
+        Build a focused follow-up request after reviewer rejection.
+        """
+        return (
+            "The previous attempt has been independently reviewed and "
+            "requires correction.\n\n"
+            "ORIGINAL USER REQUEST:\n"
+            f"{original_prompt}\n\n"
+            "REVIEWER FEEDBACK:\n"
+            f"{review['reason']}\n\n"
+            "REQUIRED REVISION:\n"
+            f"{review['revision_instructions']}\n\n"
+            "Inspect the current workspace state. Correct only the issues "
+            "identified by the reviewer where appropriate. Verify the "
+            "result before finishing."
+        )
+
     def run(self, prompt):
         self.telemetry = RunTelemetry(
             model=self.get_model_name(),
         )
 
         try:
+            baseline = self.capture_workspace_baseline()
             result = self._run(prompt)
 
-            self.telemetry.finish(status="success")
+            if not self.enable_reviewer:
+                self.telemetry.finish(
+                    status="success"
+                )
+
+                print(self.telemetry.summary())
+
+                return result
+
+            review = self.review_result(
+                prompt,
+                result,
+                baseline,
+            )
+
+            if review["decision"] == "APPROVE":
+                self.telemetry.finish(
+                    status="success"
+                )
+                print(self.telemetry.summary())
+                return result
+            print("\nReviewer rejected the result.")
+            print("Starting one revision attempt...")
+            revision_prompt = self.build_revision_prompt(
+                prompt,
+                review,
+            )
+            self.conversation = []
+            self.plan = []
+            self.current_plan_index = 0
+            revision_baseline = (self.capture_workspace_baseline())
+            revised_result = self._run(revision_prompt)
+            final_review = self.review_result(
+                prompt,
+                revised_result,
+                revision_baseline,
+            )
+            if final_review["decision"] == "APPROVE":
+                self.telemetry.finish(
+                    status="success"
+                )
+            else:
+                self.telemetry.finish(
+                    status="review_rejected",
+                    error=RuntimeError(
+                        final_review["reason"]
+                    ),
+                )
             print(self.telemetry.summary())
-
-            return result
-
+            return revised_result
         except Exception as error:
             self.telemetry.finish(
                 status="error",

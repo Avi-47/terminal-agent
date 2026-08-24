@@ -26,21 +26,17 @@ def main():
     agent = Agent(
         client,
         confirm_callback=confirm_commit,
+        enable_reviewer=True,
     )
-
     print("Terminal Agent")
     print("Type 'exit' or 'quit' to leave.\n")
-
     while True:
         try:
             prompt = input("You > ")
-
         except (KeyboardInterrupt, EOFError):
             print("\nGoodbye!")
             break
-
         prompt = prompt.strip()
-
         if not prompt:
             continue
 
@@ -50,7 +46,6 @@ def main():
 
         try:
             result = agent.run(prompt)
-
             print("\nAgent >")
             print(result)
             print()
