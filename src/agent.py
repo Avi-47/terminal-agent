@@ -1,6 +1,7 @@
 import json
 import time
 
+from .validator import validate_workspace
 from .model_router import MODELS, create_response
 from . import tools
 from .tools import (
@@ -37,6 +38,9 @@ class Agent:
         self.commit_confirmed = False
         self.conversation = []
         self.max_iterations = 10
+        self.enable_validation = True
+        self.max_validation_attempts = 3
+        self.validation_attempts = 0
         self.max_review_cycles = 1
         self.enable_reviewer = enable_reviewer
         self.use_repo_context = use_repo_context
@@ -107,9 +111,21 @@ class Agent:
 
             "Do not use git_status alone when the user asks what the actual "
             "content of a change is. In that situation, use git_diff. "
+
+            "VALIDATION RESULT messages are objective execution evidence. "
+            "A PASS means the configured validation checks completed successfully. "
+            "A FAIL means the model should inspect the reported failure, make an "
+            "appropriate correction, and allow validation to run again. "
+            "Do not ignore successful validation and repeat equivalent checks "
+            "without a reason. "
             
-            "After modifying code, normally run an appropriate command to "
-            "verify that the change works. "
+            "After modifying code, normally verify the change. "
+            "Deterministic validation results provided by the system count as "
+            "verification evidence when they successfully validate the relevant "
+            "workspace. Do not perform redundant verification merely because a "
+            "plan task contains the word 'verify'. If validation has already "
+            "passed, use that evidence to determine whether the verification "
+            "task is satisfied. "
             "When running Python tests, use 'python -m pytest' rather than "
             "'pytest' directly. "
 
@@ -140,6 +156,29 @@ class Agent:
             "write_file with the complete corrected file contents. "
             "After write_file succeeds, run an appropriate verification command "
             "when possible. "
+        )
+
+    def validate_workspace(self):
+        """
+        Run deterministic validation checks against the current workspace.
+        """
+        result = validate_workspace(
+            self.get_workspace_root()
+        )
+        print("\nValidator >")
+        print(result.to_text())
+        return result
+
+    def should_validate_after_tools(self, tool_names):
+        """
+        Validation is useful after tools that can modify the workspace.
+        """
+        modifying_tools = {
+            "write_file",
+        }
+        return any(
+            name in modifying_tools
+            for name in tool_names
         )
 
     def request_commit_confirmation(self):
@@ -510,18 +549,15 @@ class Agent:
         self.telemetry = RunTelemetry(
             model=self.get_model_name(),
         )
-
+        self.validation_attempts = 0
         try:
             baseline = self.capture_workspace_baseline()
             result = self._run(prompt)
-
             if not self.enable_reviewer:
                 self.telemetry.finish(
                     status="success"
                 )
-
                 print(self.telemetry.summary())
-
                 return result
 
             review = self.review_result(
@@ -545,6 +581,7 @@ class Agent:
             self.conversation = []
             self.plan = []
             self.current_plan_index = 0
+            self.validation_attempts = 0
             revision_baseline = (self.capture_workspace_baseline())
             revised_result = self._run(revision_prompt)
             final_review = self.review_result(
@@ -629,6 +666,7 @@ class Agent:
                 return response.output_text
             iteration += 1
             tool_outputs = []
+            executed_tool_names = []
             # Save model response.
             self.conversation.extend(response.output)
             # Show model text accompanying tool calls.
@@ -648,8 +686,8 @@ class Agent:
             for item in response.output:
                 if item.type != "function_call":
                     continue
-
                 print(f"\nTool requested: {item.name}")
+                executed_tool_names.append(item.name)
                 # Commit requires explicit confirmation.
                 if item.name == "git_commit" and not self.commit_confirmed:
                     if self.confirm_callback is not None:
@@ -730,7 +768,39 @@ class Agent:
                 continue
             # Save tool results.
             self.conversation.extend(tool_outputs)
-            # Ask the model what to do next.
+            # Run deterministic validation after workspace modifications.
+            if (
+                self.enable_validation
+                and self.should_validate_after_tools(
+                    executed_tool_names
+                )
+                and self.validation_attempts
+                < self.max_validation_attempts
+            ):
+                self.validation_attempts += 1
+                validation_result = self.validate_workspace()
+                validation_text = validation_result.to_text()
+                self.conversation.append({
+                    "role": "user",
+                    "content": (
+                        "\n"
+                        + validation_text
+                        + "\n\n"
+                        "Use this validation evidence to determine the next action. "
+                        "If validation failed, inspect the failure, correct the relevant "
+                        "code, and run the appropriate verification again. "
+                        "If validation passed and the user's request is satisfied, "
+                        "do not make unnecessary changes."
+                    ),
+                })
+                if not validation_result.passed:
+                    print(
+                        "\nValidator found failures. "
+                        "Returning evidence to the agent."
+                    )
+                if (self.validation_attempts >= self.max_validation_attempts and not validation_result.passed):
+                    print("\nValidator stopped after maximum validation attempts.")
+
             model_started = time.perf_counter()
             try:
                 response = create_response(

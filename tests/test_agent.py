@@ -387,3 +387,23 @@ def test_agent_allows_git_commit_after_confirmation():
         '{"message": "test commit"}',
     )
     assert result == "Commit created."
+
+def test_should_validate_after_write_file():
+    agent = Agent(
+        client=None,
+        use_repo_context=False,
+        enable_reviewer=False,
+    )
+    assert agent.should_validate_after_tools(
+        ["write_file"]
+    )
+
+def test_should_not_validate_after_read_file():
+    agent = Agent(
+        client=None,
+        use_repo_context=False,
+        enable_reviewer=False,
+    )
+    assert not agent.should_validate_after_tools(
+        ["read_file"]
+    )
