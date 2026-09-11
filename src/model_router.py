@@ -2,15 +2,21 @@ MODELS = [
     "qwen/qwen3.6-27b",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
+    # "llama-3.3-70b-versatile",
+    # "llama-3.1-8b-instant",
 ]
 # MODELS = [
 #     # "gemini-2.5-flash",
 #     "gemini-3.6-flash",
 # ]
 
-def create_response(client, models, instructions, conversation, tools):
+def create_response(
+    client,
+    models,
+    instructions,
+    conversation,
+    tools,
+):
     last_error = None
 
     for model in models:
@@ -23,19 +29,27 @@ def create_response(client, models, instructions, conversation, tools):
                 input=conversation,
                 tools=tools,
             )
-            # client.chat.completions.create(
-            #     model=model,
-            #     messages=conversation,
-            #     tools=tools,
-            # )
 
-        except Exception as e:
-            if "429" not in str(e):
-                raise
+        except Exception as error:
+            last_error = error
+            error_text = str(error).lower()
 
-            print(f"\n[Rate limit] {model} unavailable.")
-            last_error = e
+            retryable = (
+                "429" in error_text
+                or "rate_limit_exceeded" in error_text
+                or "too many requests" in error_text
+                or "tokens per minute" in error_text
+            )
+
+            if retryable:
+                print(
+                    f"\n[Rate limit] {model} unavailable. "
+                    "Trying next model."
+                )
+                continue
+
+            raise
 
     raise RuntimeError(
-        "All configured models are currently rate-limited."
+        "All configured models are currently unavailable."
     ) from last_error
