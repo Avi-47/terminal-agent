@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "terminal-agent": {
+      "command": "python",
+      "args": [
+        "src/mcp_server.py"
+      ]
+    }
+  }
+}

@@ -6,6 +6,8 @@ IGNORED_DIRECTORIES = {
     ".git",
     ".pytest_cache",
     "__pycache__",
+    ".venv",
+    "venv",
 }
 
 def tokenize_query(query):

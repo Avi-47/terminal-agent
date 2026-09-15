@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from eval.results import calculate_summary
 from eval.run import create_client
@@ -7,13 +8,39 @@ from eval.tasks import load_tasks
 BASE_DIR = Path(__file__).resolve().parent.parent
 TASKS_PATH = BASE_DIR / "eval" / "tasks.json"
 
+# def load_repo_context_tasks():
+#     # tasks = load_tasks(TASKS_PATH)
+#     # tasks = tasks[:5]
+#     tasks = load_tasks(TASKS_PATH)
+#     selected_task_ids = {
+#         "create_python_file",
+#         "fix_runtime_error",
+#         "modify_existing_function",
+#         "diagnose_program_failure",
+#     }
+#     tasks = [
+#         task
+#         for task in tasks
+#         if task["task_id"] in selected_task_ids
+#     ]
+#     print(f"Loaded {len(tasks)} evaluation tasks.")
+#     return [
+#         task
+#         for task in tasks
+#         if task["task_id"].startswith("repo_context_")
+#     ]
+
 def load_repo_context_tasks():
     tasks = load_tasks(TASKS_PATH)
-    return [
+
+    tasks = [
         task
         for task in tasks
         if task["task_id"].startswith("repo_context_")
     ]
+
+    print(f"Loaded {len(tasks)} repository-context evaluation tasks.")
+    return tasks
 
 def run_variant(tasks, client, use_repo_context):
     results = []

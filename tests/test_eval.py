@@ -15,7 +15,7 @@ from eval.results import (
 created_workspace = None
 
 class FakeAgent:
-    def __init__(self, client, workspace=None, use_repo_context=True,):
+    def __init__(self, client, workspace, use_repo_context=True, enable_validation=True,enable_reviewer=True,):
         global created_workspace
         created_workspace = workspace
         self.workspace = workspace
@@ -40,11 +40,12 @@ class FakeTelemetry:
         }
 
 class FakeAgentWithTelemetry(FakeAgent):
-    def __init__(self, client, workspace=None, use_repo_context=True,):
+    def __init__(self, client, workspace=None, use_repo_context=True, enable_validation=True,enable_reviewer=True,):
         super().__init__(
             client,
             workspace,
             use_repo_context,
+            enable_validation,
         )
         self.telemetry = FakeTelemetry()
 
@@ -446,3 +447,95 @@ def test_evaluation_tasks_have_required_fields():
         assert "description" in task
         assert "setup" in task
         assert "success_condition" in task
+
+def test_run_task_passes_stress_test_configuration():
+    received_config = None
+    class FakeStressAgent:
+        def __init__(
+            self,
+            client,
+            workspace,
+            use_repo_context=True,
+            enable_validation=True,
+            enable_reviewer=True,
+        ):
+            self.workspace = workspace
+        def run(self, prompt, stress_config=None):
+            nonlocal received_config
+            received_config = stress_config
+            file_path = self.workspace / "hello.py"
+            file_path.write_text(
+                "print('Hello')",
+                encoding="utf-8",
+            )
+            return "Created hello.py"
+    stress_config = {
+        "candidate_path": "solution.py",
+        "reference_path": "reference.py",
+        "generator_path": "generator.py",
+        "trials": 10,
+        "timeout": 3,
+    }
+    task = {
+        "task_id": "stress_config_test",
+        "description": "Create hello.py",
+        "setup": {},
+        "stress_test": stress_config,
+        "success_condition": {
+            "type": "file_exists",
+            "path": "hello.py",
+        },
+    }
+    result = run_task(
+        task,
+        client=None,
+        agent_factory=FakeStressAgent,
+    )
+    assert result["passed"] is True
+    assert received_config == stress_config
+
+def test_run_task_without_stress_config_preserves_existing_behavior():
+    received_config = "not-set"
+
+    class FakeAgentWithoutStress:
+        def __init__(
+            self,
+            client,
+            workspace,
+            use_repo_context=True,
+            enable_validation=True,
+            enable_reviewer=True,
+        ):
+            self.workspace = workspace
+
+        def run(self, prompt):
+            nonlocal received_config
+            received_config = None
+
+            file_path = self.workspace / "hello.py"
+
+            file_path.write_text(
+                "print('Hello')",
+                encoding="utf-8",
+            )
+
+            return "Created hello.py"
+
+    task = {
+        "task_id": "normal_task",
+        "description": "Create hello.py",
+        "setup": {},
+        "success_condition": {
+            "type": "file_exists",
+            "path": "hello.py",
+        },
+    }
+
+    result = run_task(
+        task,
+        client=None,
+        agent_factory=FakeAgentWithoutStress,
+    )
+
+    assert result["passed"] is True
+    assert received_config is None

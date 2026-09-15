@@ -2,7 +2,11 @@
   {
     "task_id": "create_python_file",
     "description": "Create a file named hello.py that prints Hello.",
-    "setup": {},
+    "setup": {
+      "files": {
+        "test_hello.py": "import subprocess\nimport sys\n\ndef test_hello_output():\n    result = subprocess.run([sys.executable, 'hello.py'], capture_output=True, text=True)\n    assert result.returncode == 0\n    assert result.stdout.strip() == 'Hello'\n"
+      }
+    },
     "success_condition": {
       "type": "file_contains",
       "path": "hello.py",
@@ -50,7 +54,8 @@
     "description": "Modify calculator.py so that add returns the sum of the two arguments.",
     "setup": {
       "files": {
-        "calculator.py": "def add(a, b):\n    return 0\n"
+        "calculator.py": "def add(a, b):\n    return 0\n",
+        "test_calculator.py": "from calculator import add\n\ndef test_add():\n    assert add(2, 3) == 5\n"
       }
     },
     "success_condition": {
@@ -123,7 +128,8 @@
     "description": "Run failing.py, identify the problem, and fix it so the program prints Success.",
     "setup": {
       "files": {
-        "failing.py": "value = 10\nprint(value / 0)\n"
+        "failing.py": "value = 10\nprint(value / 0)\n",
+        "test_failing.py": "import subprocess\nimport sys\n\ndef test_program_success():\n    result = subprocess.run([sys.executable, 'failing.py'], capture_output=True, text=True)\n    assert result.returncode == 0\n    assert result.stdout.strip() == 'Success'\n"
       }
     },
     "success_condition": {

@@ -1,3 +1,4 @@
+from .stress_tester import stress_test
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -70,36 +71,65 @@ def run_check(name, command, workspace):
             output=f"Validation could not start: {error}",
         )
 
-def validate_workspace(workspace):
+def run_stress_test_check(workspace, candidate_path, reference_path, generator_path, trials=20, timeout=5,):
+    result = stress_test(
+        workspace=workspace,
+        candidate_path=candidate_path,
+        reference_path=reference_path,
+        generator_path=generator_path,
+        trials=trials,
+        timeout=timeout,
+    )
+
+    return CheckResult(
+        name="stress_test",
+        passed=result.passed,
+        exit_code=0 if result.passed else 1,
+        output=result.to_text(),
+    )
+
+def validate_workspace(workspace, stress_config=None):
     workspace = Path(workspace)
     checks = []
-    # Check 1: Python syntax / bytecode compilation.
-    checks.append(
-        run_check(
-            "python_compile",
-            [
-                sys.executable,
-                "-m",
-                "compileall",
-                "-q",
-                ".",
-            ],
-            workspace,
-        )
+
+    compile_check = run_check(
+        "python_compile",
+        [sys.executable, "-m", "compileall", "-q", "."],
+        workspace,
     )
-    # Check 2: Project tests.
-    checks.append(
-        run_check(
-            "pytest",
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "-q",
-            ],
-            workspace,
+    checks.append(compile_check)
+
+    if not compile_check.passed:
+        return ValidationResult(
+            passed=False,
+            checks=checks,
         )
+
+    pytest_check = run_check(
+        "pytest",
+        [sys.executable, "-m", "pytest", "-q"],
+        workspace,
     )
+    checks.append(pytest_check)
+
+    if not pytest_check.passed:
+        return ValidationResult(
+            passed=False,
+            checks=checks,
+        )
+
+    if stress_config is not None:
+        checks.append(
+            run_stress_test_check(
+                workspace=workspace,
+                candidate_path=stress_config["candidate_path"],
+                reference_path=stress_config["reference_path"],
+                generator_path=stress_config["generator_path"],
+                trials=stress_config.get("trials", 20),
+                timeout=stress_config.get("timeout", 5),
+            )
+        )
+
     return ValidationResult(
         passed=all(check.passed for check in checks),
         checks=checks,

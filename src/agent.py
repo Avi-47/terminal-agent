@@ -1,7 +1,8 @@
+from pathlib import Path
 import json
 import time
-
 from .validator import validate_workspace
+from .mcp_client import MCPToolClient, format_mcp_result
 from .model_router import MODELS, create_response
 from . import tools
 from .tools import (
@@ -26,10 +27,13 @@ class Agent:
     def __init__(
         self,
         client,
-        confirm_callback=None,
         workspace=None,
+        max_iterations=10,
+        enable_reviewer=True,
         use_repo_context=True,
-        enable_reviewer=False,
+        enable_validation=True,
+        confirm_callback=None,
+        enable_mcp=False,
     ):
         self.client = client
         if workspace is not None:
@@ -38,9 +42,14 @@ class Agent:
         self.commit_confirmed = False
         self.conversation = []
         self.max_iterations = 10
-        self.enable_validation = True
+        self.enable_validation = enable_validation
         self.max_validation_attempts = 3
         self.validation_attempts = 0
+        self.stress_test_config = None
+        self.enable_mcp = enable_mcp
+        self.mcp_client = None
+        self.mcp_tools = []
+        self.mcp_tool_names = set()
         self.max_review_cycles = 1
         self.enable_reviewer = enable_reviewer
         self.use_repo_context = use_repo_context
@@ -81,6 +90,13 @@ class Agent:
             "When the requested file path is already known, use read_file directly. "
             "Do not use list_files merely to confirm that a known file exists. "
             "Use list_files only when the relevant file or directory is unknown. "
+
+            "Only use tools whose exact names appear in the provided tool definitions."
+            "Never invent, rename, namespace, or assume a tool such as"
+            "repo_browser.print_tree or any other tool that is not explicitly provided."
+            "If you need repository structure, use list_files."
+            "If you need to find text, use search_files."
+            "If you need file contents, use read_file."
 
             "For any multi-step coding task, before making the first tool call, "
             "output a short section beginning exactly with 'Plan:' followed by "
@@ -163,11 +179,103 @@ class Agent:
         Run deterministic validation checks against the current workspace.
         """
         result = validate_workspace(
-            self.get_workspace_root()
+            self.get_workspace_root(),
+            stress_config=self.stress_test_config,
         )
         print("\nValidator >")
         print(result.to_text())
         return result
+
+    def start_mcp(self):
+        if not self.enable_mcp:
+            return
+
+        server_script = (
+            Path(__file__).resolve().parent /
+            "mcp_server.py"
+        )
+
+        self.mcp_client = MCPToolClient(
+            server_script,
+            workspace=self.get_workspace_root(),
+        )
+
+        self.mcp_client.start()
+
+        tools = self.mcp_client.list_tools()
+
+        self.mcp_tools = []
+        self.mcp_tool_names = set()
+
+        for tool in tools:
+            tool_name = f"mcp_{tool.name}"
+
+            self.mcp_tools.append(
+                {
+                    "type": "function",
+                    "name": tool_name,
+                    "description": (
+                        tool.description
+                        or f"MCP tool: {tool.name}"
+                    ),
+                    "parameters": tool.input_schema,
+                }
+            )
+
+            self.mcp_tool_names.add(tool_name)
+
+
+    def stop_mcp(self):
+        if getattr(self, "mcp_client", None) is None:
+            return
+
+        try:
+            self.mcp_client.close()
+        finally:
+            self.mcp_client = None
+            self.mcp_tools = []
+            self.mcp_tool_names = set()
+
+    def get_model_tools(self):
+        return TOOLS + self.mcp_tools
+
+    def configure_stress_test(self, config):
+        """
+        Configure an optional oracle-based stress test.
+        Expected configuration:
+            {
+                "candidate_path": "...",
+                "reference_path": "...",
+                "generator_path": "...",
+                "trials": 20,
+                "timeout": 5,
+            }
+        """
+        if config is None:
+            self.stress_test_config = None
+            return
+        if not isinstance(config, dict):
+            raise ValueError(
+                "stress test configuration must be a dictionary"
+            )
+        required = {
+            "candidate_path",
+            "reference_path",
+            "generator_path",
+        }
+        missing = required - config.keys()
+        if missing:
+            raise ValueError(
+                "stress test configuration is missing: "
+                f"{sorted(missing)}"
+            )
+        self.stress_test_config = {
+            "candidate_path": config["candidate_path"],
+            "reference_path": config["reference_path"],
+            "generator_path": config["generator_path"],
+            "trials": config.get("trials", 20),
+            "timeout": config.get("timeout", 5),
+        }
 
     def should_validate_after_tools(self, tool_names):
         """
@@ -545,11 +653,15 @@ class Agent:
             "result before finishing."
         )
 
-    def run(self, prompt):
+    def run(self, prompt, stress_config=None):
+        self.configure_stress_test(stress_config)
         self.telemetry = RunTelemetry(
             model=self.get_model_name(),
         )
         self.validation_attempts = 0
+
+        self.start_mcp()
+
         try:
             baseline = self.capture_workspace_baseline()
             result = self._run(prompt)
@@ -641,7 +753,7 @@ class Agent:
                     + self.get_current_plan_instruction()
                 ),
                 self.conversation,
-                TOOLS,
+                self.get_model_tools(),
             )
         except Exception:
             model_duration = time.perf_counter() - model_started
@@ -727,55 +839,61 @@ class Agent:
                     "call_id": item.call_id,
                     "output": tool_result,
                 })
-            # If there were no tool calls, check if tasks remain.
+            # If there were no tool calls, the model has not performed
+            # any concrete workspace action yet.
             if not tool_outputs:
+                # If a plan task is currently in progress, do NOT mark it
+                # complete merely because the model returned text.
                 if (
                     self.plan
                     and self.current_plan_index < len(self.plan)
                     and self.plan[self.current_plan_index]["status"]
                     == "in_progress"
                 ):
-                    self.finish_plan_task(self.current_plan_index)
-                    self.current_plan_index += 1
-                
-                # Only return if no more tasks remain
-                if not self.plan or self.current_plan_index >= len(self.plan):
-                    return response.output_text
-                
-                # Otherwise, ask the model to continue with the next task
-                model_started = time.perf_counter()
-                try:
-                    response = create_response(
-                        self.client,
-                        MODELS,
-                        self.get_model_instructions(),
-                        self.conversation,
-                        TOOLS,
-                    )
-                except Exception:
+                    self.conversation.append({
+                        "role": "user",
+                        "content": (
+                            "The current plan task has not been completed yet. "
+                            "You did not execute any tool call. "
+                            "Complete the current plan task using the available tools. "
+                            "Do not claim completion without performing the required action."
+                        ),
+                    })
+                    model_started = time.perf_counter()
+                    try:
+                        response = create_response(
+                            self.client,
+                            MODELS,
+                            self.get_model_instructions(),
+                            self.conversation,
+                            self.get_model_tools(),
+                        )
+                    except Exception:
+                        model_duration = (
+                            time.perf_counter() - model_started
+                        )
+                        self.telemetry.record_model_call(
+                            turn=self.telemetry.data["turns"] + 1,
+                            duration=model_duration,
+                        )
+                        raise
                     model_duration = time.perf_counter() - model_started
                     self.telemetry.record_model_call(
                         turn=self.telemetry.data["turns"] + 1,
                         duration=model_duration,
+                        response=response,
                     )
-                    raise
-                model_duration = time.perf_counter() - model_started
-                self.telemetry.record_model_call(
-                    turn=self.telemetry.data["turns"] + 1,
-                    duration=model_duration,
-                    response=response,
-                )
-                continue
+                    continue
+                # No plan is active. A response without tool calls is a
+                # legitimate final response.
+                return response.output_text
+            
             # Save tool results.
             self.conversation.extend(tool_outputs)
             # Run deterministic validation after workspace modifications.
-            if (
-                self.enable_validation
-                and self.should_validate_after_tools(
-                    executed_tool_names
-                )
-                and self.validation_attempts
-                < self.max_validation_attempts
+            if (self.enable_validation 
+                and self.should_validate_after_tools(executed_tool_names)
+                and self.validation_attempts < self.max_validation_attempts
             ):
                 self.validation_attempts += 1
                 validation_result = self.validate_workspace()
@@ -808,7 +926,7 @@ class Agent:
                     MODELS,
                     self.get_model_instructions(),
                     self.conversation,
-                    TOOLS,
+                    self.get_model_tools(),
                 )
             except Exception:
                 model_duration = time.perf_counter() - model_started
@@ -845,10 +963,17 @@ class Agent:
     def _execute_tool_with_telemetry(self, name, arguments):
         tool_started = time.perf_counter()
         try:
-            tool_result = execute_tool_call(
-                name,
-                arguments,
-            )
+            if name in self.mcp_tool_names:
+                if isinstance(arguments, str):
+                    arguments = json.loads(arguments)
+                actual_name = name[len("mcp_"):]
+                result = self.mcp_client.call_tool(
+                    actual_name,
+                    arguments,
+                )
+                tool_result = format_mcp_result(result)
+            else:
+                tool_result = execute_tool_call(name, arguments)
         except Exception:
             duration = time.perf_counter() - tool_started
             self.telemetry.record_tool_call(

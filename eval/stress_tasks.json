@@ -1,0 +1,50 @@
+[
+    {
+        "task_id": "algorithm_stress_second_largest",
+        "description": "Implement solution.py so that it reads integers from standard input and prints the required second-largest value according to the problem specification. The input contains at least two distinct integers. The implementation must work correctly for arbitrary valid integer inputs.",
+        "setup": {
+            "files": {
+                "solution.py": "import sys\n\nnumbers = list(map(int, sys.stdin.read().split()))\nprint(sorted(numbers)[-2])\n",
+                "reference.py": "import sys\n\nnumbers = list(map(int, sys.stdin.read().split()))\nunique_numbers = sorted(set(numbers))\nprint(unique_numbers[-2])\n",
+                "generator.py": "import random\nimport sys\n\nseed = int(sys.stdin.read().strip() or 0)\nrandom.seed(seed)\n\nvalues = random.sample(range(-100, 101), 5)\nvalues.append(values[0])\nrandom.shuffle(values)\n\nprint(*values)\n",
+                "test_solution.py": "from pathlib import Path\n\n\ndef test_solution_exists():\n    assert Path('solution.py').exists()\n"
+            }
+        },
+        "stress_test": {
+            "candidate_path": "solution.py",
+            "reference_path": "reference.py",
+            "generator_path": "generator.py",
+            "trials": 20,
+            "timeout": 5
+        },
+        "success_condition": {
+            "type": "file_contains",
+            "path": "solution.py",
+            "text": "set(numbers)"
+        }
+    },
+    {
+        "task_id": "algorithm_stress_max_frequency",
+        "description": "Implement solution.py so that it reads integers from standard input and prints the maximum value that occurs exactly once. The input is guaranteed to contain at least one such value. The implementation must work correctly for arbitrary valid integer inputs.",
+        "setup": {
+            "files": {
+                "solution.py": "import sys\nfrom collections import Counter\n\nnumbers = list(map(int, sys.stdin.read().split()))\ncounts = Counter(numbers)\nprint(max(numbers))\n",
+                "reference.py": "import sys\nfrom collections import Counter\n\nnumbers = list(map(int, sys.stdin.read().split()))\ncounts = Counter(numbers)\nunique_values = [x for x in numbers if counts[x] == 1]\nprint(max(unique_values))\n",
+                "generator.py": "import random\nimport sys\n\nseed = int(sys.stdin.read().strip() or 0)\nrandom.seed(seed)\n\nunique_values = random.sample(range(-100, 101), 3)\nrepeated_value = random.choice(unique_values)\n\nvalues = unique_values + [repeated_value, repeated_value]\nrandom.shuffle(values)\n\nprint(*values)\n",
+                "test_solution.py": "from pathlib import Path\n\n\ndef test_solution_exists():\n    assert Path('solution.py').exists()\n"
+            }
+        },
+        "stress_test": {
+            "candidate_path": "solution.py",
+            "reference_path": "reference.py",
+            "generator_path": "generator.py",
+            "trials": 20,
+            "timeout": 5
+        },
+        "success_condition": {
+            "type": "file_contains",
+            "path": "solution.py",
+            "text": "counts[x] == 1"
+        }
+    }
+]

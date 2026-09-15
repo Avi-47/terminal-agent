@@ -151,7 +151,10 @@ def test_agent_routes_tool_calls_through_execute_tool_call():
         output_text = "Done."
     class FakeClient:
         pass
-    agent = Agent(FakeClient())
+    agent = Agent(
+        FakeClient(),
+        enable_reviewer=False,
+    )
     with patch(
         "src.agent.create_response",
         side_effect=[
@@ -188,7 +191,10 @@ def test_agent_uses_tool_layer_for_rejected_command():
         output_text = "I cannot run that command."
     class FakeClient:
         pass
-    agent = Agent(FakeClient())
+    agent = Agent(
+        FakeClient(),
+        enable_reviewer=False,
+    )
     with patch(
         "src.agent.create_response",
         side_effect=[
@@ -317,7 +323,10 @@ def test_agent_blocks_git_commit_without_confirmation():
     class FakeClient:
         pass
 
-    agent = Agent(FakeClient())
+    agent = Agent(
+        FakeClient(),
+        enable_reviewer=False,
+    )
 
     with patch(
         "src.agent.create_response",
@@ -364,6 +373,7 @@ def test_agent_allows_git_commit_after_confirmation():
     agent = Agent(
         FakeClient(),
         confirm_callback=confirm_callback,
+        enable_reviewer=False,
     )
 
     with patch(

@@ -39,11 +39,12 @@ def create_response(
                 or "rate_limit_exceeded" in error_text
                 or "too many requests" in error_text
                 or "tokens per minute" in error_text
+                or "tool_use_failed" in error_text
             )
 
             if retryable:
                 print(
-                    f"\n[Rate limit] {model} unavailable. "
+                    f"\n[Model unavailable/rejected] {model}. "
                     "Trying next model."
                 )
                 continue
