@@ -1,0 +1,75 @@
+{
+  "mcp_off": {
+    "summary": {
+      "tasks": 2,
+      "passed": 0,
+      "pass_rate": 0.0,
+      "avg_turns": 1.0,
+      "avg_tool_calls": 0.0,
+      "avg_duration_seconds": 1.5659044999999998
+    },
+    "results": [
+      {
+        "task_id": "symbol_analysis_validate",
+        "passed": false,
+        "turns": 1,
+        "tool_calls": 0,
+        "duration_seconds": 2.331571,
+        "model": "llama-3.3-70b-versatile",
+        "tools": [],
+        "response": null,
+        "status": "error",
+        "error": "RuntimeError('All configured models are currently unavailable.')"
+      },
+      {
+        "task_id": "symbol_analysis_run_agent",
+        "passed": false,
+        "turns": 1,
+        "tool_calls": 0,
+        "duration_seconds": 0.800238,
+        "model": "llama-3.3-70b-versatile",
+        "tools": [],
+        "response": null,
+        "status": "error",
+        "error": "RuntimeError('All configured models are currently unavailable.')"
+      }
+    ]
+  },
+  "mcp_on": {
+    "summary": {
+      "tasks": 2,
+      "passed": 0,
+      "pass_rate": 0.0,
+      "avg_turns": 1.0,
+      "avg_tool_calls": 0.0,
+      "avg_duration_seconds": 2.0014305
+    },
+    "results": [
+      {
+        "task_id": "symbol_analysis_validate",
+        "passed": false,
+        "turns": 1,
+        "tool_calls": 0,
+        "duration_seconds": 2.067813,
+        "model": "llama-3.3-70b-versatile",
+        "tools": [],
+        "response": null,
+        "status": "error",
+        "error": "RuntimeError('All configured models are currently unavailable.')"
+      },
+      {
+        "task_id": "symbol_analysis_run_agent",
+        "passed": false,
+        "turns": 1,
+        "tool_calls": 0,
+        "duration_seconds": 1.935048,
+        "model": "llama-3.3-70b-versatile",
+        "tools": [],
+        "response": null,
+        "status": "error",
+        "error": "RuntimeError('All configured models are currently unavailable.')"
+      }
+    ]
+  },
+  "mcp_tool_usage": {}
+}

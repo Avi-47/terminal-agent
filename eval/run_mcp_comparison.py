@@ -3,12 +3,19 @@ import os
 import sys
 import time
 from pathlib import Path
-
+from .workspace import (
+    create_repository_workspace,
+    cleanup_workspace,
+)
+ROOT = Path(__file__).resolve().parent.parent
+FIXTURE_ROOT = (
+    Path(__file__).resolve().parent /
+    "mcp_fixture"
+)
 from dotenv import load_dotenv
 from openai import OpenAI
 
 
-ROOT = Path(__file__).resolve().parent.parent
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -74,15 +81,19 @@ def run_condition(
         )
         print("=" * 72)
 
-        result = run_task(
+        # result = run_task(
+        #     task,
+        #     client,
+        #     use_repo_context=True,
+        #     enable_validation=False,
+        #     enable_reviewer=False,
+        #     enable_mcp=enable_mcp,
+        # )
+        result = run_repository_task(
             task,
             client,
-            use_repo_context=True,
-            enable_validation=False,
-            enable_reviewer=False,
             enable_mcp=enable_mcp,
         )
-
         results.append(result)
 
         print(
@@ -273,21 +284,88 @@ def print_comparison(
 
     print("=" * 72)
 
+def run_repository_task(task, client, enable_mcp):
+    workspace = create_repository_workspace(FIXTURE_ROOT)
+    try:
+        agent = Agent(
+            client,
+            workspace=workspace,
+            use_repo_context=False,
+            enable_validation=False,
+            enable_reviewer=False,
+            enable_mcp=enable_mcp,
+        )
+        start = time.perf_counter()
+        response = agent.run(
+            task["description"]
+        )
+        elapsed = time.perf_counter() - start
+        passed = (
+            task["success_condition"]["text"].lower()
+            in response.lower()
+        )
+        telemetry = agent.telemetry.data
+        return {
+            "task_id": task["task_id"],
+            "passed": passed,
+            "turns": telemetry["turns"],
+            "tool_calls": telemetry["tool_calls"],
+            "duration_seconds": elapsed,
+            "model": telemetry["model"],
+            "tools": telemetry.get("tools", []),
+            "response": response,
+            "status": telemetry.get("status"),
+        }
+    except Exception as error:
+        telemetry = getattr(
+            locals().get("agent"),
+            "telemetry",
+            None,
+        )
+        if telemetry is not None:
+            data = telemetry.data
+            return {
+                "task_id": task["task_id"],
+                "passed": False,
+                "turns": data.get("turns", 0),
+                "tool_calls": data.get("tool_calls", 0),
+                "duration_seconds": data.get(
+                    "duration_seconds",
+                    0,
+                ),
+                "model": data.get("model"),
+                "tools": data.get("tools", []),
+                "response": None,
+                "status": data.get("status", "error"),
+                "error": repr(error),
+            }
+        return {
+            "task_id": task["task_id"],
+            "passed": False,
+            "turns": 0,
+            "tool_calls": 0,
+            "duration_seconds": 0,
+            "model": None,
+            "tools": [],
+            "response": None,
+            "status": "error",
+            "error": repr(error),
+        }
+    finally:
+        try:
+            agent.stop_mcp()
+        except Exception:
+            pass
+        cleanup_workspace(workspace)
 
 def main():
     tasks = load_tasks()
-
-    print(
-        f"Loaded {len(tasks)} MCP benchmark tasks."
-    )
-
+    print(f"Loaded {len(tasks)} MCP benchmark tasks.")
     client = create_client()
-
     print()
     print("=" * 72)
     print("RUN 1: MCP OFF")
     print("=" * 72)
-
     off_results = run_condition(
         tasks,
         client,

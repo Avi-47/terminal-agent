@@ -126,12 +126,11 @@ class MCPToolClient:
     def close(self):
         if not self._started or self._stopped:
             return
-
-        self._send(("close",))
-
-        self._thread.join(timeout=10)
-
-        self._stopped = True
+        try:
+            self._send(("close",))
+        finally:
+            self._thread.join(timeout=10)
+            self._stopped = True
 
 
 def format_mcp_result(result):
@@ -185,11 +184,17 @@ if __name__ == "__main__":
         for tool in tools:
             print(f"  - {tool.name}")
 
+        # result = client.call_tool(
+        #     "search_repository",
+        #     {
+        #         "query": "validation",
+        #         "limit": 5,
+        #     },
+        # )
         result = client.call_tool(
-            "search_repository",
+            "analyze_symbol",
             {
-                "query": "validation",
-                "limit": 5,
+                "symbol_name": "validate_workspace",
             },
         )
 

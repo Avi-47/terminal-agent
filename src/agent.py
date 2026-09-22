@@ -128,6 +128,11 @@ class Agent:
             "Do not use git_status alone when the user asks what the actual "
             "content of a change is. In that situation, use git_diff. "
 
+            "When a task requires finding a Python symbol's definition and repository "
+            "references, prefer the MCP symbol-analysis tool when it is available."
+            "Use native repository tools for general file inspection, editing, command"
+            "execution, and Git operations."
+
             "VALIDATION RESULT messages are objective execution evidence. "
             "A PASS means the configured validation checks completed successfully. "
             "A FAIL means the model should inspect the reported failure, make an "
@@ -665,6 +670,7 @@ class Agent:
         try:
             baseline = self.capture_workspace_baseline()
             result = self._run(prompt)
+
             if not self.enable_reviewer:
                 self.telemetry.finish(
                     status="success"
@@ -684,23 +690,34 @@ class Agent:
                 )
                 print(self.telemetry.summary())
                 return result
+
             print("\nReviewer rejected the result.")
             print("Starting one revision attempt...")
+
             revision_prompt = self.build_revision_prompt(
                 prompt,
                 review,
             )
+
             self.conversation = []
             self.plan = []
             self.current_plan_index = 0
             self.validation_attempts = 0
-            revision_baseline = (self.capture_workspace_baseline())
-            revised_result = self._run(revision_prompt)
+
+            revision_baseline = (
+                self.capture_workspace_baseline()
+            )
+
+            revised_result = self._run(
+                revision_prompt
+            )
+
             final_review = self.review_result(
                 prompt,
                 revised_result,
                 revision_baseline,
             )
+
             if final_review["decision"] == "APPROVE":
                 self.telemetry.finish(
                     status="success"
@@ -712,8 +729,10 @@ class Agent:
                         final_review["reason"]
                     ),
                 )
+
             print(self.telemetry.summary())
             return revised_result
+
         except Exception as error:
             self.telemetry.finish(
                 status="error",
@@ -721,6 +740,9 @@ class Agent:
             )
             print(self.telemetry.summary())
             raise
+
+        finally:
+            self.stop_mcp()
 
     def _run(self, prompt):
         self.repository_context = (

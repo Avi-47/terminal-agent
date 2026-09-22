@@ -59,3 +59,39 @@ def cleanup_workspace(workspace):
         return
     import shutil
     shutil.rmtree(workspace)
+
+def create_repository_workspace(source):
+    source = Path(source).resolve()
+
+    if not source.is_dir():
+        raise ValueError(
+            f"Repository source does not exist: {source}"
+        )
+
+    workspace = Path(
+        tempfile.mkdtemp(
+            prefix="terminal-agent-mcp-eval-"
+        )
+    )
+
+    try:
+        import shutil
+
+        shutil.copytree(
+            source,
+            workspace,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns(
+                ".git",
+                ".venv",
+                "__pycache__",
+                ".pytest_cache",
+                "logs",
+            ),
+        )
+
+        return workspace
+
+    except Exception:
+        cleanup_workspace(workspace)
+        raise

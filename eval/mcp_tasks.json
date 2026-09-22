@@ -1,47 +1,31 @@
 [
   {
-    "task_id": "find_validation_implementation",
-    "description": "Find where workspace validation is implemented. Identify the file and the main function responsible for running validation checks. Do not modify any files.",
-    "setup": {},
+    "task_id": "symbol_analysis_validate",
+    "description": "Find where validate_workspace is defined and identify its references.",
+    "setup": {
+      "files": {
+        "validator.py": "def validate_workspace(workspace, stress_config=None):\n    return True\n",
+        "agent.py": "from validator import validate_workspace\n\ndef run_agent(workspace):\n    return validate_workspace(workspace)\n",
+        "tests/test_validator.py": "from validator import validate_workspace\n\ndef test_validation():\n    assert validate_workspace(None)\n"
+      }
+    },
     "success_condition": {
       "type": "response_contains",
       "text": "validator.py"
     }
   },
   {
-    "task_id": "find_stress_testing",
-    "description": "Find where stress testing is implemented in this repository. Identify the relevant file and explain briefly how the stress test compares candidate and reference outputs. Do not modify any files.",
-    "setup": {},
+    "task_id": "symbol_analysis_run_agent",
+    "description": "Find where run_agent is defined and identify its references.",
+    "setup": {
+      "files": {
+        "agent.py": "def run_agent(workspace):\n    return workspace\n",
+        "runner.py": "from agent import run_agent\n\ndef main(workspace):\n    return run_agent(workspace)\n"
+      }
+    },
     "success_condition": {
       "type": "response_contains",
-      "text": "stress_tester.py"
-    }
-  },
-  {
-    "task_id": "find_repository_context",
-    "description": "Find the code responsible for building and retrieving repository context. Identify the relevant file and the main functions involved. Do not modify any files.",
-    "setup": {},
-    "success_condition": {
-      "type": "response_contains",
-      "text": "repo_context.py"
-    }
-  },
-  {
-    "task_id": "find_mcp_implementation",
-    "description": "Find the MCP server implementation in this repository. Identify the file and list the MCP tools exposed by it. Do not modify any files.",
-    "setup": {},
-    "success_condition": {
-      "type": "response_contains",
-      "text": "mcp_server.py"
-    }
-  },
-  {
-    "task_id": "find_agent_tool_dispatch",
-    "description": "Find where the coding agent dispatches tool calls. Identify the main function responsible for executing a tool call and explain briefly how it distinguishes MCP tools from native tools. Do not modify any files.",
-    "setup": {},
-    "success_condition": {
-      "type": "response_contains",
-      "text": "_execute_tool_with_telemetry"
+      "text": "agent.py"
     }
   }
 ]

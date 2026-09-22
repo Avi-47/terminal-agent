@@ -15,9 +15,8 @@ def run_task(
     enable_reviewer=True,
     enable_mcp=False,
 ):
-    workspace = create_workspace(
-        task["setup"]
-    )
+    workspace = create_workspace(task["setup"])
+    agent = None
 
     try:
         agent_kwargs = {
@@ -53,11 +52,7 @@ def run_task(
             response=response,
         )
 
-        telemetry = getattr(
-            agent,
-            "telemetry",
-            None,
-        )
+        telemetry = getattr(agent, "telemetry", None)
 
         if telemetry is not None:
             data = telemetry.data
@@ -65,13 +60,19 @@ def run_task(
             result = {
                 "task_id": task["task_id"],
                 "passed": passed,
-                "turns": data["turns"],
-                "tool_calls": data["tool_calls"],
-                "duration_seconds": data["duration_seconds"],
-                "model": data["model"],
+                "turns": data.get("turns", 0),
+                "tool_calls": data.get("tool_calls", 0),
+                "duration_seconds": data.get(
+                    "duration_seconds",
+                    0,
+                ),
+                "model": data.get("model"),
                 "tools": data.get("tools", []),
+                "status": data.get(
+                    "status",
+                    "success",
+                ),
             }
-
         else:
             result = {
                 "task_id": task["task_id"],
@@ -82,5 +83,49 @@ def run_task(
 
         return result
 
+    except Exception as error:
+        telemetry = getattr(agent, "telemetry", None)
+
+        if telemetry is not None:
+            data = telemetry.data
+
+            return {
+                "task_id": task["task_id"],
+                "passed": False,
+                "turns": data.get("turns", 0),
+                "tool_calls": data.get("tool_calls", 0),
+                "duration_seconds": data.get(
+                    "duration_seconds",
+                    0,
+                ),
+                "model": data.get("model"),
+                "tools": data.get("tools", []),
+                "response": None,
+                "status": data.get(
+                    "status",
+                    "error",
+                ),
+                "error": str(error),
+            }
+
+        return {
+            "task_id": task["task_id"],
+            "passed": False,
+            "turns": 0,
+            "tool_calls": 0,
+            "duration_seconds": 0,
+            "model": None,
+            "tools": [],
+            "response": None,
+            "status": "error",
+            "error": str(error),
+        }
+
     finally:
+        if agent is not None:
+            try:
+                agent.stop_mcp()
+            except Exception:
+                pass
+
         cleanup_workspace(workspace)

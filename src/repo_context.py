@@ -323,3 +323,149 @@ def build_repository_map(workspace_root):
         repository_map,
         key=lambda item: item["path"].lower(),
     )
+
+def analyze_symbol(repository_root, symbol_name):
+    """
+    Analyze where a Python symbol is defined and where it is referenced.
+
+    Returns a dictionary containing:
+        symbol
+        definitions
+        references
+    """
+    if not isinstance(symbol_name, str):
+        raise ValueError(
+            "symbol_name must be a string"
+        )
+
+    symbol_name = symbol_name.strip()
+
+    if not symbol_name:
+        raise ValueError(
+            "symbol_name must not be empty"
+        )
+
+    repository_root = Path(
+        repository_root
+    ).resolve()
+
+    if not repository_root.exists():
+        raise ValueError(
+            f"workspace does not exist: {repository_root}"
+        )
+
+    if not repository_root.is_dir():
+        raise ValueError(
+            f"workspace is not a directory: {repository_root}"
+        )
+
+    definitions = []
+    references = []
+
+    for file_path in repository_root.rglob("*.py"):
+        relative_path = file_path.relative_to(
+            repository_root
+        )
+
+        if should_ignore(relative_path):
+            continue
+
+        try:
+            source = file_path.read_text(
+                encoding="utf-8"
+            )
+            tree = ast.parse(source)
+        except (
+            OSError,
+            UnicodeDecodeError,
+            SyntaxError,
+        ):
+            continue
+
+        for node in ast.walk(tree):
+
+            if isinstance(
+                node,
+                (
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef,
+                    ast.ClassDef,
+                ),
+            ):
+                if node.name == symbol_name:
+                    parent_class = None
+
+                    for parent in ast.walk(tree):
+                        if isinstance(
+                            parent,
+                            ast.ClassDef,
+                        ):
+                            for child in parent.body:
+                                if child is node:
+                                    parent_class = parent.name
+                                    break
+
+                    definitions.append(
+                        {
+                            "file": relative_path.as_posix(),
+                            "line": node.lineno,
+                            "type": (
+                                "class"
+                                if isinstance(
+                                    node,
+                                    ast.ClassDef,
+                                )
+                                else "function"
+                            ),
+                            "class": parent_class,
+                        }
+                    )
+
+            elif isinstance(
+                node,
+                ast.Name,
+            ):
+                if node.id == symbol_name:
+                    references.append(
+                        {
+                            "file": relative_path.as_posix(),
+                            "line": node.lineno,
+                            "context": "name",
+                        }
+                    )
+
+            elif isinstance(
+                node,
+                ast.Attribute,
+            ):
+                if node.attr == symbol_name:
+                    references.append(
+                        {
+                            "file": relative_path.as_posix(),
+                            "line": node.lineno,
+                            "context": "attribute",
+                        }
+                    )
+
+    definition_locations = {
+        (
+            item["file"],
+            item["line"],
+        )
+        for item in definitions
+    }
+
+    references = [
+        item
+        for item in references
+        if (
+            item["file"],
+            item["line"],
+        ) not in definition_locations
+    ]
+
+    return {
+        "symbol": symbol_name,
+        "definitions": definitions,
+        "references": references,
+    }
